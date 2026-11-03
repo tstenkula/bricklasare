@@ -715,7 +715,7 @@ namespace Tobtech.OmnikeyRco
             // This is the last UI-thread gate, after all awaited restoration work.
             // No result or automatic clipboard value may outlive cancellation or USB invalidation.
             token.ThrowIfCancellationRequested();
-            if (reconnectPending || !outputProtected || active == null || !Object.ReferenceEquals(reader, active) || active.HasPendingRecovery)
+            if (reconnectPending || !outputProtected || active == null || !Object.ReferenceEquals(reader, active) || active.HasPendingRecovery || (!isReference && !IsReady))
                 throw new OperationCanceledException("Läsaranslutningen ändrades innan läsningen var klar.");
             connection.Text = "Läsaren är ansluten";
             if (isReference)

@@ -251,7 +251,7 @@
             bool rejected = false;
             try { Call(form, "PublishScanResult", new ScanResult { Mr = "102700513", Er = "051501029" }, reader, FormatProfiles.Combo, "M", false, token); }
             catch (System.Reflection.TargetInvocationException ex) { if (!(ex.InnerException is OperationCanceledException)) throw; rejected = true; }
-            Check(rejected && !(bool)Call(form, "get_HasResults") && Field<string>(form, "lastCopied") == "", description);
+            Check(rejected && Field<TextBox>(form, "mr").Text == "—" && Field<TextBox>(form, "er").Text == "—" && Field<string>(form, "lastCopied") == "", description);
         }
         private static void ExerciseLateReaderCompletion(string directory)
         {
@@ -274,6 +274,13 @@
                 RejectPublication(form, reader, System.Threading.CancellationToken.None, "A detached reader cannot publish a late result");
                 Check(!(bool)Call(form, "TryBeginFileOperation", true), "Export rejects a reader lost while its dialog was open");
                 SetField(form, "reader", reader);
+                Call(reader, "set_CalibrationIssue", "Synthetic profile failure");
+                Check(!reader.CanRead, "Late-result fixture has a reader that is no longer ready");
+                RejectPublication(form, reader, System.Threading.CancellationToken.None, "Completed numbers from a reader that is no longer ready are not displayed or copied");
+                Call(reader, "set_CalibrationIssue", new object[] { null });
+                SetField(form, "profileChosen", false);
+                RejectPublication(form, reader, System.Threading.CancellationToken.None, "Normal results require a chosen access-system format at publication");
+                SetField(form, "profileChosen", true);
                 Call(form, "SetBusy", true);
                 Check(!(bool)Call(form, "TryBeginFileOperation", false) && Field<bool>(form, "busy"), "Report saving never takes ownership from an in-flight reconnect");
                 Check(!(bool)Call(form, "TryBeginFileOperation", true) && Field<bool>(form, "busy"), "Export never takes ownership from an in-flight reconnect");
