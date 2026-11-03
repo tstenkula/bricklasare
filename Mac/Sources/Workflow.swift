@@ -1,5 +1,64 @@
 import AppKit
 
+// All scheduling state belongs to the UI thread. A slow USB probe cannot block typing,
+// stack probes, or overwrite a newer wake/reconnect decision when it eventually returns.
+final class USBMonitor {
+  private let queue = DispatchQueue(label: "se.tobtech.bricklasaren.usb-watch", qos: .utility)
+  private let probe: () -> USBState
+  private let timeout: TimeInterval
+  private var generation: UInt64 = 0
+  private var flight: UInt64 = 0
+  private var stopped = false
+  private var deadline: DispatchWorkItem?
+  private(set) var inFlight = false
+  private(set) var timedOut = false
+  init(timeout: TimeInterval = 3, probe: @escaping () -> USBState = USBState.current) {
+    self.timeout = timeout
+    self.probe = probe
+  }
+  deinit { deadline?.cancel() }
+  func invalidate() {
+    dispatchPrecondition(condition: .onQueue(.main))
+    generation &+= 1
+  }
+  func stop() {
+    invalidate()
+    stopped = true
+    deadline?.cancel()
+    deadline = nil
+  }
+  func poll(_ receive: @escaping (USBState) -> Void, onTimeout: @escaping () -> Void) {
+    dispatchPrecondition(condition: .onQueue(.main))
+    guard !inFlight, !stopped else { return }
+    inFlight = true
+    flight &+= 1
+    let currentFlight = flight
+    let started = generation
+    let probe = self.probe
+    let deadline = DispatchWorkItem { [weak self] in
+      guard let self, self.inFlight, self.flight == currentFlight, !self.stopped else { return }
+      self.generation &+= 1
+      self.timedOut = true
+      // Keep inFlight true until the native call returns; never pile up blocked probes.
+      onTimeout()
+    }
+    self.deadline = deadline
+    DispatchQueue.main.asyncAfter(deadline: .now() + timeout, execute: deadline)
+    queue.async { [weak self] in
+      let state = probe()
+      DispatchQueue.main.async { [weak self] in
+        guard let self else { return }
+        self.inFlight = false
+        self.deadline?.cancel()
+        self.deadline = nil
+        guard !self.stopped, started == self.generation else { return }
+        self.timedOut = false
+        receive(state)
+      }
+    }
+  }
+}
+
 struct WorkflowSettings: Codable {
   var copy = 0
   var sounds = false
@@ -40,12 +99,14 @@ extension AppController {
       "Av", "Första numret", "Andra numret (om det finns)", "Båda med rubriker (MIFARE + EM)",
     ])
     copy.selectItem(at: workflow.copy)
+    copy.setAccessibilityLabel("Kopiera automatiskt")
     let sounds = NSButton(
       checkboxWithTitle: "Ljud för lägg på, lyft bort och klart", target: nil, action: nil)
     sounds.state = workflow.sounds ? .on : .off
     let channel = NSPopUpButton()
     channel.addItems(withTitles: ["Stabil", "Förhandsversioner"])
     channel.selectItem(at: workflow.channel == "preview" ? 1 : 0)
+    channel.setAccessibilityLabel("Uppdateringskanal")
     let auto = NSButton(
       checkboxWithTitle: "Sök efter nya versioner när appen startar", target: nil,
       action: nil)
@@ -60,8 +121,7 @@ extension AppController {
           "Du väljer själv när en uppdatering ska installeras.",
           size: 12),
       ], spacing: 16)
-    root.addArrangedSubview(
-      button("Spara") { [weak self, weak d] in
+    let save = button("Spara", primary: true) { [weak self, weak d] in
         guard let self else { return }
         let next = WorkflowSettings(
           copy: copy.indexOfSelectedItem, sounds: sounds.state == .on,
@@ -72,12 +132,20 @@ extension AppController {
           self.workflow = next
           d?.finish(true)
         } catch { showError(error) }
-      })
+      }
+    root.addArrangedSubview(stack([
+      save, button("Avbryt") { [weak d] in d?.finish(false) },
+    ], horizontal: true))
     setRoot(d, root)
+    d.initialFirstResponder = copy
     return d
   }
   @objc func shortcutRead() { if !busy && info?.ready == true { scan() } }
-  @objc func shortcutCancel() { token?.cancel() }
+  @objc func shortcutCancel() {
+    if let dialog = NSApp.modalWindow as? Dialog { dialog.finish(false); return }
+    token?.cancel()
+    if busy { clearResults(); notice = "Avbryter och återställer läsaren …"; rebuild() }
+  }
   @objc func shortcutFirst() { if let outputs { copy(outputs.0) } }
   @objc func shortcutSecond() { if let outputs, !outputs.1.isEmpty { copy(outputs.1) } }
   @objc func shortcutBoth() {
@@ -104,27 +172,41 @@ extension AppController {
     menu.addItem(item)
   }
   func startConnectionWatch() {
-    lastUSB = USBState.current()
+    let monitor = USBMonitor()
+    usbMonitor = monitor
     wakeObserver = NSWorkspace.shared.notificationCenter.addObserver(
       forName: NSWorkspace.didWakeNotification, object: nil, queue: .main
     ) { [weak self] _ in self?.invalidateConnection() }
     connectionTimer = Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { [weak self] _ in
       guard let self else { return }
-      let current = USBState.current()
-      if let previous = self.lastUSB,
-        current.count != previous.count || current.fingerprint != previous.fingerprint
-      {
-        self.lastUSB = current
-        // Internal USB mode transitions during connection are expected. A scan always invalidates.
-        if !self.busy || self.token != nil { self.invalidateConnection() }
-      }
-      if self.reconnectPending && !self.busy && NSApp.modalWindow == nil {
+      self.pollUSB()
+      if self.shouldReconnect {
         self.reconnectPending = false
         self.connect()
       }
     }
+    pollUSB()
+  }
+  var shouldReconnect: Bool {
+    reconnectPending && !busy && usbMonitor?.timedOut != true && NSApp.modalWindow == nil
+  }
+  func pollUSB() {
+    usbMonitor?.poll({ [weak self] current in
+      guard let self else { return }
+      let previous = self.lastUSB
+      self.lastUSB = current
+      let changed = previous.map { current.count != $0.count || current.fingerprint != $0.fingerprint } ?? (current.count != 1)
+      // Internal USB mode transitions during connection are expected. A scan always invalidates.
+      if changed && (!self.busy || self.token != nil) { self.invalidateConnection() }
+    }, onTimeout: { [weak self] in
+      guard let self else { return }
+      self.invalidateConnection()
+      self.readyMessage()
+      self.rebuild()
+    })
   }
   func invalidateConnection() {
+    usbMonitor?.invalidate()
     clearResults()
     info = nil
     token?.cancel()

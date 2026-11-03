@@ -4,6 +4,7 @@ namespace Tobtech.OmnikeyRco
     using System;
     using System.Collections.Generic;
     using System.Drawing;
+    using System.Drawing.Drawing2D;
     using System.IO;
     using System.Text;
     using System.Threading;
@@ -28,6 +29,36 @@ namespace Tobtech.OmnikeyRco
                     using (ReceptionForm form = new ReceptionForm()) Application.Run(form);
                 }
                 finally { Ui.DisposeFonts(); mutex.ReleaseMutex(); }
+            }
+        }
+    }
+    internal sealed class UiCard : TableLayoutPanel
+    {
+        private Color surface = Color.White;
+        internal Color SurfaceColor { get { return surface; } set { if (surface != value) { surface = value; Invalidate(true); } } }
+        internal UiCard()
+        {
+            SetStyle(ControlStyles.SupportsTransparentBackColor, true);
+            DoubleBuffered = true; BackColor = Color.Transparent;
+            AutoSize = true; Dock = DockStyle.Top; ColumnCount = 1; Margin = new Padding(0);
+            ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        }
+        protected override void OnPaintBackground(PaintEventArgs e)
+        {
+            base.OnPaintBackground(e);
+            if (ClientSize.Width < 2 || ClientSize.Height < 2) return;
+            float diameter = Math.Min(16F * e.Graphics.DpiX / 96F, Math.Min(ClientSize.Width - 1, ClientSize.Height - 1));
+            RectangleF area = new RectangleF(0.5F, 0.5F, ClientSize.Width - 1F, ClientSize.Height - 1F);
+            using (GraphicsPath path = new GraphicsPath())
+            using (SolidBrush brush = new SolidBrush(surface))
+            using (Pen border = new Pen(Color.FromArgb(225, 232, 236)))
+            {
+                path.AddArc(area.Left, area.Top, diameter, diameter, 180, 90);
+                path.AddArc(area.Right - diameter, area.Top, diameter, diameter, 270, 90);
+                path.AddArc(area.Right - diameter, area.Bottom - diameter, diameter, diameter, 0, 90);
+                path.AddArc(area.Left, area.Bottom - diameter, diameter, diameter, 90, 90); path.CloseFigure();
+                SmoothingMode previous = e.Graphics.SmoothingMode; e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
+                e.Graphics.FillPath(brush, path); e.Graphics.DrawPath(border, path); e.Graphics.SmoothingMode = previous;
             }
         }
     }
@@ -77,7 +108,7 @@ namespace Tobtech.OmnikeyRco
         {
             return new Label { Text = text, AutoSize = true, Dock = DockStyle.Top,
                 Font = GetFont(size, bold),
-                ForeColor = Ink, Margin = new Padding(0, 0, 0, 6) };
+                ForeColor = Ink, Margin = new Padding(0, 0, 0, 6), TabStop = false };
         }
         public static Button Button(string text, bool primary)
         {
@@ -86,6 +117,7 @@ namespace Tobtech.OmnikeyRco
                 Padding = new Padding(15, 7, 15, 7), Margin = new Padding(0, 0, 12, 0),
                 MinimumSize = new Size(100, 45), Cursor = Cursors.Hand, UseVisualStyleBackColor = false,
                 Tag = primary ? "primary" : "secondary", BackColor = primary ? Accent : Color.White, ForeColor = primary ? Theme.ButtonText : Ink };
+            b.AccessibleName = text;
             b.FlatAppearance.BorderSize = primary ? 0 : 1;
             b.FlatAppearance.BorderColor = Color.FromArgb(186, 200, 203);
             StyleButton(b);
@@ -105,6 +137,15 @@ namespace Tobtech.OmnikeyRco
         public static void Add(TableLayoutPanel p, Control c)
         {
             int row = p.RowCount++; p.RowStyles.Add(new RowStyle(SizeType.AutoSize)); p.Controls.Add(c, 0, row);
+        }
+        internal static void WrapLabels(Control parent)
+        {
+            int width = Math.Max(120, parent.ClientSize.Width - parent.Padding.Horizontal - 8);
+            foreach (Control child in parent.Controls)
+            {
+                Label label = child as Label;
+                if (label != null && label.AutoSize && label.MaximumSize.Width != width) label.MaximumSize = new Size(width, 0);
+            }
         }
     }
     public sealed partial class ReceptionForm : Form
@@ -132,25 +173,27 @@ namespace Tobtech.OmnikeyRco
         private string mode = FormatProfiles.Combo;
         private string rcoChip = "M";
         private readonly Label subtitle = Ui.Label("En bricka. Två passersystem.", 11F, false);
-        private readonly Label foot = Ui.Label("Använd samma bricka i båda stegen. Låt detta fönster vara aktivt under läsningen.", 9.5F, false);
         private readonly Label leftTitle = Ui.Label("Eget passersystem", 12F, true);
         private readonly Label leftDetail = Ui.Label("mR · MIFARE", 9.5F, false);
         private readonly Label rightTitle = Ui.Label("Hyresvärdens passersystem", 12F, true);
         private readonly Label rightDetail = Ui.Label("eR · EM", 9.5F, false);
+        private readonly Label leftState = Ui.Label("Väntar på läsning", 9.5F, false);
+        private readonly Label rightState = Ui.Label("Väntar på läsning", 9.5F, false);
         private Control rightCard;
         private TableLayoutPanel outputs;
 
-        private readonly Label connection = Ui.Label("Ansluter läsaren …", 10F, false);
-        private readonly Label stage = Ui.Label("VÄLKOMMEN", 10F, true);
-        private readonly Label instruction = Ui.Label("Gör klart för en ny bricka", 23F, true);
-        private readonly Label hint = Ui.Label("Håll brickan borta från läsaren tills du blir ombedd att lägga på den.", 11F, false);
+        private readonly Label connection = Ui.Label("Ansluter läsaren …", 9.5F, false);
+        private readonly Label stage = Ui.Label("VÄLKOMMEN", 9.5F, true);
+        private readonly Label instruction = Ui.Label("Gör klart för en ny bricka", 20F, true);
+        private readonly Label hint = Ui.Label("Håll brickan borta tills du blir ombedd att lägga på den.", 10.5F, false);
         private readonly Label notice = Ui.Label("", 10F, false);
-        private readonly TableLayoutPanel statusPanel = Ui.Stack();
+        private readonly UiCard statusPanel = new UiCard();
         private readonly Button read = Ui.Button("Läs bricka", true);
         private readonly Button cancel = Ui.Button("Avbryt", false);
         private readonly Button copyM = Ui.Button("Kopiera till eget system", false);
         private readonly Button copyE = Ui.Button("Kopiera till hyresvärden", false);
         private readonly Button copyBoth = Ui.Button("Kopiera båda numren", false);
+        private readonly Button clear = Ui.Button("Rensa", false);
         private readonly Button help = Ui.Button("Hjälp", false);
         private readonly Button setup = Ui.Button("Anslut läsare", false);
         private readonly TextBox mr = NumberBox("Första ID-numret");
@@ -163,48 +206,73 @@ namespace Tobtech.OmnikeyRco
             appearanceDirectory = appearancePath;
             workflow = WorkflowSettings.Load(appearancePath);
             if (!previewOnly) { reconnectTimer.Tick += async delegate { if (!busy && OwnedForms.Length == 0 && reconnectPending) { reconnectPending = false; reconnectTimer.Stop(); await ConnectReader(); } }; }
-            Directory.CreateDirectory(ReceptionFiles.DataPath);
-            address = ReceptionFiles.LoadAddress(log);
-            FormatPreference preference = ReceptionFiles.LoadFormatPreference();
+            if (!previewOnly) Directory.CreateDirectory(ReceptionFiles.DataPath);
+            address = previewOnly ? "192.168.63.99" : ReceptionFiles.LoadAddress(log);
+            FormatPreference preference = previewOnly ? null : ReceptionFiles.LoadFormatPreference();
             profileChosen = preference != null;
             if (profileChosen) { mode = preference.Mode; rcoChip = preference.RcoChip; }
 
             string iconPath = Path.Combine(ReceptionFiles.PackagePath, "Program", "Bricklasaren.ico");
             if (File.Exists(iconPath)) { try { using (Icon source = new Icon(iconPath)) appIcon = (Icon)source.Clone(); Icon = appIcon; } catch (ArgumentException) { } catch (IOException) { } catch (UnauthorizedAccessException) { } }
-            Text = "Brickläsaren · 3.5.2";
+            Text = "Brickläsaren · 3.6.0";
             Font = Ui.GetFont(10F); ForeColor = Ui.Ink; BackColor = Ui.Paper;
             AutoScaleMode = AutoScaleMode.Dpi; AutoScaleDimensions = new SizeF(96F, 96F);
             StartPosition = FormStartPosition.CenterScreen;
-            ClientSize = new Size(900, 720); MinimumSize = new Size(800, 560);
-            AutoScroll = true; KeyPreview = true;
-            TableLayoutPanel root = Ui.Stack(); root.Padding = new Padding(26, 23, 26, 16); Controls.Add(root);
-            TableLayoutPanel header = new TableLayoutPanel { Dock = DockStyle.Top, AutoSize = true, ColumnCount = 2, Margin = new Padding(0, 0, 0, 12) };
+            ClientSize = new Size(900, 650); MinimumSize = new Size(800, 600);
+            AutoScroll = true; KeyPreview = true; DoubleBuffered = true;
+            SuspendLayout();
+            TableLayoutPanel root = Ui.Stack(); root.Padding = new Padding(24, 20, 24, 16); root.TabIndex = 0; Controls.Add(root);
+            TableLayoutPanel header = new TableLayoutPanel { Dock = DockStyle.Top, AutoSize = true, ColumnCount = 2, Margin = new Padding(0, 0, 0, 12), TabIndex = 3 };
             header.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100)); header.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
             TableLayoutPanel heading = Ui.Stack();
+            heading.SizeChanged += delegate { Ui.WrapLabels(heading); };
             Ui.Add(heading, logo); Ui.Add(heading, brand); Ui.Add(heading, brandSubtitle);
-            Ui.Add(heading, Ui.Label("Brickläsaren", 24F, true));
+            Ui.Add(heading, Ui.Label("Brickläsaren", 22F, true));
             subtitle.ForeColor = Ui.Muted; Ui.Add(heading, subtitle);
-            header.Controls.Add(heading, 0, 0); help.Anchor = AnchorStyles.Top | AnchorStyles.Right; help.Margin = new Padding(15, 8, 0, 0); header.Controls.Add(help, 1, 0); Ui.Add(root, header);
-            connection.ForeColor = Ui.Muted; connection.Margin = new Padding(0, 0, 0, 15); Ui.Add(root, connection);
-            statusPanel.BackColor = Ui.AccentLight; statusPanel.Padding = new Padding(20, 14, 20, 12);
-            statusPanel.Margin = new Padding(0, 0, 0, 12); statusPanel.MinimumSize = new Size(0, 120);
+            TableLayoutPanel tools = Ui.Stack(); tools.Margin = new Padding(18, 3, 0, 0);
+            connection.ForeColor = Ui.Muted; connection.MaximumSize = new Size(250, 0); connection.TextAlign = ContentAlignment.MiddleRight;
+            connection.AccessibleRole = AccessibleRole.StaticText;
+            help.Anchor = AnchorStyles.Top | AnchorStyles.Right; help.Margin = new Padding(0, 4, 0, 0); help.TabIndex = 0;
+            Ui.Add(tools, connection); Ui.Add(tools, help);
+            header.Controls.Add(heading, 0, 0); header.Controls.Add(tools, 1, 0); Ui.Add(root, header);
+            statusPanel.SurfaceColor = Ui.AccentLight; statusPanel.Padding = new Padding(18, 12, 18, 12);
+            statusPanel.Margin = new Padding(0, 0, 0, 14); statusPanel.TabIndex = 0; statusPanel.MinimumSize = new Size(0, 132);
+            statusPanel.ColumnCount = 2; statusPanel.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+            statusPanel.RowCount = 1; statusPanel.RowStyles.Add(new RowStyle(SizeType.AutoSize));
             stage.ForeColor = Ui.Accent; hint.ForeColor = Ui.Muted;
-            Ui.Add(statusPanel, stage); Ui.Add(statusPanel, instruction); Ui.Add(statusPanel, hint); Ui.Add(root, statusPanel);
-            FlowLayoutPanel actions = Ui.Row(); read.MinimumSize = new Size(260, 52); cancel.MinimumSize = new Size(110, 52);
-            actions.Controls.Add(read); actions.Controls.Add(cancel); actions.Controls.Add(setup); Ui.Add(root, actions);
-            outputs = new TableLayoutPanel { Dock = DockStyle.Top, AutoSize = true, ColumnCount = 2, Margin = new Padding(0, 4, 0, 14) };
+            stage.Margin = new Padding(0, 0, 0, 2); instruction.Margin = new Padding(0, 0, 0, 4); hint.Margin = new Padding(0, 0, 0, 10);
+            instruction.AccessibleRole = AccessibleRole.StaticText; hint.AccessibleRole = AccessibleRole.StaticText;
+            TableLayoutPanel instructions = Ui.Stack(); Ui.Add(instructions, stage); Ui.Add(instructions, instruction); Ui.Add(instructions, hint);
+            instructions.Anchor = AnchorStyles.Left; instructions.Dock = DockStyle.Fill;
+            instructions.SizeChanged += delegate { Ui.WrapLabels(instructions); }; statusPanel.Controls.Add(instructions, 0, 0);
+            FlowLayoutPanel actions = Ui.Row(); actions.FlowDirection = FlowDirection.TopDown; actions.WrapContents = false;
+            actions.Dock = DockStyle.None; actions.Anchor = AnchorStyles.Right; actions.Margin = new Padding(20, 0, 0, 0); actions.TabIndex = 0;
+            read.MinimumSize = new Size(200, 44); cancel.MinimumSize = new Size(200, 44); setup.MinimumSize = new Size(200, 44);
+            read.Margin = new Padding(0); cancel.Margin = new Padding(0, 8, 0, 0); setup.Margin = new Padding(0, 8, 0, 0);
+            read.TabIndex = 0; cancel.TabIndex = 1; setup.TabIndex = 2;
+            read.AccessibleDescription = "Starta en läsning med Ctrl+R."; cancel.AccessibleDescription = "Avbryt läsningen med Escape.";
+            actions.Controls.Add(read); actions.Controls.Add(cancel); actions.Controls.Add(setup); statusPanel.Controls.Add(actions, 1, 0); Ui.Add(root, statusPanel);
+            TableLayoutPanel resultHeader = new TableLayoutPanel { Dock = DockStyle.Top, AutoSize = true, ColumnCount = 3, Margin = new Padding(0, 0, 0, 8), TabIndex = 2 };
+            resultHeader.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+            resultHeader.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize)); resultHeader.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+            Label resultTitle = Ui.Label("Brickans nummer", 12F, true); resultTitle.Anchor = AnchorStyles.Left; resultTitle.Dock = DockStyle.None; resultTitle.Margin = new Padding(0);
+            resultHeader.Controls.Add(resultTitle, 0, 0);
+            foreach (Button small in new Button[] { copyBoth, clear }) { small.Font = Ui.GetFont(9.5F); small.MinimumSize = new Size(70, 34); small.Padding = new Padding(10, 4, 10, 4); small.Margin = new Padding(8, 0, 0, 0); }
+            copyBoth.TabIndex = 0; clear.TabIndex = 1; copyBoth.AccessibleDescription = "Kopiera båda numren med Ctrl+3.";
+            clear.AccessibleDescription = "Rensa visade nummer och urklippet om det fortfarande innehåller det kopierade resultatet.";
+            resultHeader.Controls.Add(copyBoth, 1, 0); resultHeader.Controls.Add(clear, 2, 0); Ui.Add(root, resultHeader);
+            outputs = new TableLayoutPanel { Dock = DockStyle.Top, AutoSize = true, ColumnCount = 2, Margin = new Padding(0, 0, 0, 10), TabIndex = 1 };
             outputs.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50)); outputs.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
-            outputs.Controls.Add(ResultCard(leftTitle, leftDetail, mr, copyM, true), 0, 0);
-            rightCard = ResultCard(rightTitle, rightDetail, er, copyE, false);
+            outputs.Controls.Add(ResultCard(leftTitle, leftDetail, mr, leftState, copyM, true), 0, 0);
+            rightCard = ResultCard(rightTitle, rightDetail, er, rightState, copyE, false);
             outputs.Controls.Add(rightCard, 1, 0); Ui.Add(root, outputs);
-            FlowLayoutPanel bottom = Ui.Row(); copyBoth.Font = Ui.GetFont(10F); bottom.Controls.Add(copyBoth); Ui.Add(root, bottom);
-            notice.ForeColor = Ui.Accent; notice.MinimumSize = new Size(0, 22); notice.AccessibleRole = AccessibleRole.StaticText; Ui.Add(root, notice);
-            foot.ForeColor = Ui.Muted; Ui.Add(root, foot); Controls.Add(keyboardSink);
+            notice.ForeColor = Ui.Accent; notice.AccessibleRole = AccessibleRole.StaticText; notice.Visible = false;
+            notice.TextChanged += delegate { notice.Visible = notice.Text.Length > 0; }; Ui.Add(root, notice); Controls.Add(keyboardSink);
             root.SizeChanged += delegate
             {
                 SetWrap(statusPanel);
                 int width = Math.Max(200, root.ClientSize.Width - root.Padding.Horizontal - 8);
-                notice.MaximumSize = new Size(width, 0); foot.MaximumSize = new Size(width, 0);
+                notice.MaximumSize = new Size(width, 0);
             };
             help.Click += async delegate { await ShowHelp(); };
             setup.Click += async delegate { await SetupReader(); };
@@ -213,6 +281,7 @@ namespace Tobtech.OmnikeyRco
             copyM.Click += delegate { Copy(mr.Text, "Numret är kopierat."); };
             copyE.Click += delegate { Copy(er.Text, "Numret är kopierat."); };
             copyBoth.Click += delegate { if (HasResults && mode == FormatProfiles.Combo) Copy(ReceptionText.Both(mr.Text, er.Text), "Båda numren är kopierade med rubriker."); };
+            clear.Click += delegate { ClearDisplayedResults(); };
             if (!previewOnly) Shown += async delegate
             {
                 Rectangle work = Screen.FromControl(this).WorkingArea;
@@ -241,10 +310,10 @@ namespace Tobtech.OmnikeyRco
             {
                 if (!busy) return;
                 e.Cancel = true; RequestCancel();
-                notice.Text = "Låt programmet avsluta läsningen. Stäng sedan fönstret igen.";
+                notice.Text = "Låt programmet arbeta klart. Stäng sedan fönstret igen.";
             };
-            log.Add("Receptionsgränssnitt 3.5.2 (PowerShell). Lokal diagnostik utan råa kortdata.");
-            ApplyAppearance(); ApplyModeUi(); UpdateButtons();
+            log.Add("Receptionsgränssnitt 3.6.0 (PowerShell). Lokal diagnostik utan råa kortdata.");
+            ApplyAppearance(); ApplyModeUi(); UpdateButtons(); ResumeLayout(true);
             if (previewOnly) connection.Text = "Förhandsvisning · ingen läsarkontakt";
         }
         private void ApplyAppearance()
@@ -255,11 +324,11 @@ namespace Tobtech.OmnikeyRco
             brand.Text = settings.Organization; brand.Visible = brand.Text.Length > 0; brand.ForeColor = Ui.AccentDark;
             brandSubtitle.Text = settings.Subtitle; brandSubtitle.Visible = brandSubtitle.Text.Length > 0; brandSubtitle.ForeColor = Ui.Muted;
             Image previous = logo.Image;
-            logo.Image = AppearanceFiles.LoadLogo(appearanceDirectory, settings);
+            logo.Image = AppearanceFiles.LoadDisplayLogo(appearanceDirectory, settings, new Size(Math.Max(1, logo.Width * 2), Math.Max(1, logo.Height * 2)));
             if (previous != null) previous.Dispose();
             logo.Visible = logo.Image != null;
             notice.ForeColor = Ui.AccentDark;
-            statusPanel.BackColor = statusWarning ? Color.FromArgb(255, 241, 221) : Ui.AccentLight;
+            statusPanel.SurfaceColor = statusWarning ? Color.FromArgb(255, 241, 221) : Ui.AccentLight;
             stage.ForeColor = statusWarning ? Color.FromArgb(127, 71, 9) : Ui.AccentDark;
         }
         protected override void Dispose(bool disposing)
@@ -277,19 +346,25 @@ namespace Tobtech.OmnikeyRco
         private static TextBox NumberBox(string name)
         {
             return new TextBox { ReadOnly = true, BorderStyle = BorderStyle.None, BackColor = Color.White,
-                ForeColor = Ui.Ink, Dock = DockStyle.Top, TextAlign = HorizontalAlignment.Left, Font = Ui.GetFont(28F, true, "Consolas"),
+                ForeColor = Ui.Ink, Dock = DockStyle.Top, TextAlign = HorizontalAlignment.Left, Font = Ui.GetFont(32F, true, "Consolas"),
                 Margin = new Padding(0, 5, 0, 10), TabStop = false, AccessibleName = name, Text = "—" };
         }
-        private static Control ResultCard(Label title, Label detail, TextBox number, Button copy, bool left)
+        private static Control ResultCard(Label title, Label detail, TextBox number, Label state, Button copy, bool left)
         {
-            TableLayoutPanel card = Ui.Stack(); card.Dock = DockStyle.Fill; card.Padding = new Padding(16, 12, 16, 12);
-            card.BackColor = Color.White; card.Margin = left ? new Padding(0, 0, 8, 0) : new Padding(8, 0, 0, 0);
-            Ui.Add(card, title); detail.ForeColor = Ui.Muted; Ui.Add(card, detail); Ui.Add(card, number); copy.Dock = DockStyle.Top; copy.Margin = new Padding(0); Ui.Add(card, copy); return card;
+            UiCard card = new UiCard(); card.Dock = DockStyle.Fill; card.Padding = new Padding(16, 12, 16, 12); card.TabIndex = left ? 0 : 1;
+            card.Margin = left ? new Padding(0, 0, 8, 0) : new Padding(8, 0, 0, 0);
+            title.Margin = new Padding(0, 0, 0, 4); detail.Margin = new Padding(0);
+            number.Margin = new Padding(0, 3, 0, 6); state.ForeColor = Ui.Muted; state.AutoSize = false; state.Height = 18; state.Margin = new Padding(0, 0, 0, 6);
+            copy.AccessibleDescription = left ? "Kopiera det första numret med Ctrl+1." : "Kopiera det andra numret med Ctrl+2."; copy.TabIndex = 0;
+            copy.Font = Ui.GetFont(10F, true); copy.MinimumSize = new Size(100, 40); copy.Padding = new Padding(10, 5, 10, 5);
+            Ui.Add(card, title); detail.ForeColor = Ui.Muted; Ui.Add(card, detail); Ui.Add(card, number); Ui.Add(card, state);
+            copy.Dock = DockStyle.Top; copy.Margin = new Padding(0); Ui.Add(card, copy);
+            card.SizeChanged += delegate { Ui.WrapLabels(card); }; return card;
         }
         private void SetWrap(Control p)
         {
-            int width = Math.Max(180, p.ClientSize.Width - p.Padding.Horizontal - 8);
-            foreach (Control c in p.Controls) { Label l = c as Label; if (l != null) l.MaximumSize = new Size(width, 0); }
+            Ui.WrapLabels(p);
+            foreach (Control child in p.Controls) if (child is TableLayoutPanel) Ui.WrapLabels(child);
         }
         // Keyboard-wedge output is not our data source. Ignore Enter and digits on this form.
         // This is local to our window, not a global keyboard hook.
@@ -311,11 +386,13 @@ namespace Tobtech.OmnikeyRco
             // running scan has completed its journalled restoration and dialogs have closed.
             if (!resourcesDisposed && ((m.Msg == 0x219 && (m.WParam.ToInt64() == 0x8000 || m.WParam.ToInt64() == 0x8004)) ||
                 (m.Msg == 0x218 && (m.WParam.ToInt64() == 18 || m.WParam.ToInt64() == 7))))
-            {
-                ClearResults(); outputProtected = false; RequestCancel();
-                reconnectPending = true; reconnectTimer.Start(); UpdateButtons();
-            }
+                InvalidateReaderConnection();
             base.WndProc(ref m);
+        }
+        private void InvalidateReaderConnection()
+        {
+            ClearResults(); outputProtected = false; RequestCancel();
+            reconnectPending = true; reconnectTimer.Start(); UpdateButtons();
         }
         private bool HasResults
         {
@@ -329,8 +406,8 @@ namespace Tobtech.OmnikeyRco
         }
         private void ApplyModeUi()
         {
+            SuspendLayout(); outputs.SuspendLayout();
             subtitle.Text = profileChosen ? FormatProfiles.Label(mode) : "Välj passersystem vid första starten";
-            foot.Text = mode == FormatProfiles.Combo ? "Använd samma bricka i båda stegen." : "Läs en bricka i taget.";
             bool hasTwo = mode == FormatProfiles.Combo || mode == FormatProfiles.Rco;
             rightCard.Visible = hasTwo;
             outputs.ColumnStyles[0].Width = hasTwo ? 50 : 100;
@@ -358,33 +435,62 @@ namespace Tobtech.OmnikeyRco
                 leftTitle.Text = "Bewator 2010 / Omnis"; leftDetail.Text = "EM · 13 siffror";
                 copyM.Text = "Kopiera Bewator-numret";
             }
+            mr.AccessibleName = leftTitle.Text + ", " + leftDetail.Text;
+            er.AccessibleName = rightTitle.Text + ", " + rightDetail.Text;
+            copyM.AccessibleName = copyM.Text; copyE.AccessibleName = copyE.Text;
             ClearResults();
             if (reader != null) ReadyMessage();
-            UpdateButtons();
+            UpdateButtons(); outputs.ResumeLayout(true); ResumeLayout(true);
         }
 
-        private bool IsReady { get { return profileChosen && outputProtected && reader != null && reader.CanRead && !reader.HasPendingRecovery; } }
+        private bool IsReady { get { return !reconnectPending && profileChosen && outputProtected && reader != null && reader.CanRead && !reader.HasPendingRecovery; } }
         private void UpdateButtons()
         {
             setup.Visible = reader == null; setup.Enabled = !busy;
             read.Enabled = !busy && IsReady; read.Text = HasResults ? "Läs nästa bricka" : "Läs bricka";
+            read.AccessibleName = read.Text;
             cancel.Visible = busy && cancellation != null; cancel.Enabled = cancel.Visible && !cancelling;
             copyM.Enabled = !busy && IsReady && HasResults;
             copyE.Enabled = !busy && IsReady && HasResults && (mode == FormatProfiles.Combo || mode == FormatProfiles.Rco);
             copyBoth.Enabled = !busy && IsReady && HasResults && mode == FormatProfiles.Combo;
+            clear.Enabled = !busy && HasResults;
+            leftState.Text = HasResults ? "Ctrl+1 för att kopiera" : "Väntar på läsning";
+            rightState.Text = HasResults ? "Ctrl+2 för att kopiera" : "Väntar på läsning";
             help.Enabled = !busy;
         }
         private void SetBusy(bool value)
         {
-            busy = value; UpdateButtons(); if (value) keyboardSink.Focus();
+            busy = value; UpdateButtons();
+            if (value) keyboardSink.Focus();
+            else if (keyboardSink.Focused) FocusAction();
+        }
+        private void FocusAction()
+        {
+            if (!Visible || !ContainsFocus) return;
+            if (read.Enabled) read.Focus();
+            else if (setup.Visible && setup.Enabled) setup.Focus();
+            else if (help.Enabled) help.Focus();
+        }
+        private bool TryBeginFileOperation(bool requiresReader)
+        {
+            // Native file dialogs pump Windows messages. A reconnect may have started
+            // while the dialog was open; only claim an operation after it has closed.
+            if (busy || IsDisposed || Disposing || (requiresReader && !IsReady)) return false;
+            SetBusy(true); return true;
+        }
+        private void ClearDisplayedResults()
+        {
+            if (busy) return;
+            ClearResults(); ReadyMessage(); UpdateButtons(); FocusAction();
         }
         private void SetInstruction(string eyebrow, string title, string text, bool warning)
         {
             if (IsDisposed || Disposing) return;
+            statusPanel.SuspendLayout();
             statusWarning = warning; stage.Text = eyebrow; instruction.Text = title; hint.Text = text;
-            statusPanel.BackColor = warning ? Color.FromArgb(255, 241, 221) : Ui.AccentLight;
+            statusPanel.SurfaceColor = warning ? Color.FromArgb(255, 241, 221) : Ui.AccentLight;
             stage.ForeColor = warning ? Color.FromArgb(127, 71, 9) : Ui.AccentDark;
-            SetWrap(statusPanel);
+            SetWrap(statusPanel); statusPanel.ResumeLayout(true);
         }
         private void Progress(string message)
         {
@@ -417,7 +523,12 @@ namespace Tobtech.OmnikeyRco
         private void ReadyMessage()
         {
             if (reader == null) return;
-            if (reader.HasPendingRecovery)
+            if (reconnectPending)
+            {
+                connection.Text = "Anslutningen kontrolleras";
+                SetInstruction("ANSLUTER", "Kontrollerar läsaren igen", "Låt USB-kabeln sitta i. Vänta tills läsaren är klar innan du lägger på en bricka.", false);
+            }
+            else if (reader.HasPendingRecovery)
             {
                 connection.Text = "Läsaren behöver återställas";
                 SetInstruction("HJÄLP BEHÖVS", "En läsning blev inte avslutad", "Låt läsaren vara inkopplad. Välj Hjälp och be IT återställa den.", true);
@@ -440,7 +551,7 @@ namespace Tobtech.OmnikeyRco
             else
             {
                 connection.Text = "Läsaren är ansluten";
-                SetInstruction("KLAR ATT BÖRJA", "Klicka på Läs bricka", "Håll brickan borta från läsaren tills du blir ombedd att lägga på den.", false);
+                SetInstruction("KLAR ATT BÖRJA", "Läs en ny bricka", "Håll brickan borta tills du blir ombedd att lägga på den.", false);
             }
         }
         private void PreparationProgress(string message)
@@ -458,6 +569,7 @@ namespace Tobtech.OmnikeyRco
         private async Task ConnectReader()
         {
             if (busy) return;
+            reconnectPending = false; reconnectTimer.Stop();
             ClearResults(); reader = null; outputProtected = false; SetBusy(true); connection.Text = "Ansluter läsaren …";
             SetInstruction("ANSLUTER", "Kontrollerar läsaren", "Låt USB-kabeln sitta i. Du behöver inte lägga på någon bricka ännu.", false);
             ReaderClient candidate = null;
@@ -534,7 +646,7 @@ namespace Tobtech.OmnikeyRco
         }
         private async Task Scan(bool isReference)
         {
-            if (busy || !profileChosen || !outputProtected || reader == null || reader.HasPendingRecovery || (!isReference && !reader.CanRead)) return;
+            if (busy || reconnectPending || !profileChosen || !outputProtected || reader == null || reader.HasPendingRecovery || (!isReference && !reader.CanRead)) return;
             if (isReference)
             {
                 try { ReferenceCard.Read(Path.Combine(ReceptionFiles.DataPath, ReferenceCard.FileName)); }
@@ -565,41 +677,13 @@ namespace Tobtech.OmnikeyRco
                 outputProtected = false;
                 active = await Task.Run(delegate { return ReaderSafety.EnsureProtected(active, address, ReceptionFiles.DataPath, log, PreparationProgress); });
                 reader = active; outputProtected = true;
-                cancellation.Token.ThrowIfCancellationRequested();
-                connection.Text = "Väntar på nästa skanning";
-                if (isReference)
-                {
-                    ReadyMessage(); notice.Text = "Kontrollen är godkänd. Den verifierade läsarprofilen används nu.";
-                }
-                else
-                {
-                    if (chosenMode == FormatProfiles.Combo)
-                    {
-                        mr.Text = result.Mr; er.Text = result.Er;
-                        SetInstruction("KLART", "Båda numren är lästa", "Kopiera numren och klicka på Läs nästa bricka.", false);
-                    }
-                    else if (chosenMode == FormatProfiles.Rco)
-                    {
-                        mr.Text = FormatProfiles.RcoShort(result, chosenChip);
-                        er.Text = FormatProfiles.RcoLong(result, chosenChip);
-                        SetInstruction("KLART", "Kort och lång ID-kod är klara", "Välj rätt längd för det aktuella RCO-systemet.", false);
-                    }
-                    else if (chosenMode == FormatProfiles.Axema)
-                    {
-                        mr.Text = FormatProfiles.Vaka14(result);
-                        SetInstruction("KLART", "VAKA-numret är klart", "Kopiera numret och klicka på Läs nästa bricka.", false);
-                    }
-                    else
-                    {
-                        mr.Text = FormatProfiles.Bewator13(result);
-                        SetInstruction("KLART", "Bewator-numret är klart", "Kopiera numret och klicka på Läs nästa bricka.", false);
-                    }
-                    notice.Text = "Klart. Kopiera numret du behöver.";
-                }
+                PublishScanResult(result, active, chosenMode, chosenChip, isReference, cancellation.Token);
             }
             catch (OperationCanceledException)
             {
-                ClearResults(); SetInstruction("AVBRUTET", "Läsningen har avbrutits", "Inga nummer lämnas ut. Klicka på Läs bricka när du vill börja igen.", false);
+                ClearResults();
+                if (reconnectPending) SetInstruction("ANSLUTER", "Kontrollerar läsaren igen", "Resultatet har rensats. Låt USB-kabeln sitta i medan läsaren kontrolleras.", false);
+                else SetInstruction("AVBRUTET", "Läsningen har avbrutits", "Inga nummer lämnas ut. Klicka på Läs bricka när du vill börja igen.", false);
             }
             catch (Exception ex)
             {
@@ -626,6 +710,41 @@ namespace Tobtech.OmnikeyRco
                 if (HasResults) copyM.Focus(); else if (read.Enabled) read.Focus();
             }
         }
+        private void PublishScanResult(ScanResult result, ReaderClient active, string chosenMode, string chosenChip, bool isReference, CancellationToken token)
+        {
+            // This is the last UI-thread gate, after all awaited restoration work.
+            // No result or automatic clipboard value may outlive cancellation or USB invalidation.
+            token.ThrowIfCancellationRequested();
+            if (reconnectPending || !outputProtected || active == null || !Object.ReferenceEquals(reader, active) || active.HasPendingRecovery)
+                throw new OperationCanceledException("Läsaranslutningen ändrades innan läsningen var klar.");
+            connection.Text = "Läsaren är ansluten";
+            if (isReference)
+            {
+                ReadyMessage(); notice.Text = "Kontrollen är godkänd. Den verifierade läsarprofilen används nu."; return;
+            }
+            if (chosenMode == FormatProfiles.Combo)
+            {
+                mr.Text = result.Mr; er.Text = result.Er;
+                SetInstruction("KLART", "Läsningen är klar", "Kopiera numren och klicka på Läs nästa bricka.", false);
+            }
+            else if (chosenMode == FormatProfiles.Rco)
+            {
+                mr.Text = FormatProfiles.RcoShort(result, chosenChip);
+                er.Text = FormatProfiles.RcoLong(result, chosenChip);
+                SetInstruction("KLART", "Läsningen är klar", "Välj rätt längd för det aktuella RCO-systemet.", false);
+            }
+            else if (chosenMode == FormatProfiles.Axema)
+            {
+                mr.Text = FormatProfiles.Vaka14(result);
+                SetInstruction("KLART", "Läsningen är klar", "Kopiera numret och klicka på Läs nästa bricka.", false);
+            }
+            else
+            {
+                mr.Text = FormatProfiles.Bewator13(result);
+                SetInstruction("KLART", "Läsningen är klar", "Kopiera numret och klicka på Läs nästa bricka.", false);
+            }
+            notice.Text = "";
+        }
         private void RequestCancel()
         {
             if (cancellation == null || cancelling) return;
@@ -642,13 +761,20 @@ namespace Tobtech.OmnikeyRco
             ReceptionFiles.RecordFailure(ex);
             try { ReceptionFiles.WriteAtomic(Path.Combine(ReceptionFiles.DataPath, "senaste-fel-reception.txt"), ReceptionFiles.Report()); } catch { }
         }
-        private void SaveReport()
+        private async Task SaveReport()
         {
+            if (busy) return;
             using (SaveFileDialog d = new SaveFileDialog { Filter = "Textfil (*.txt)|*.txt", FileName = "Bricklasaren-felrapport-" + DateTime.Now.ToString("yyyyMMdd-HHmm") + ".txt", Title = "Spara felrapport till IT" })
             {
                 if (d.ShowDialog(this) != DialogResult.OK) return;
-                try { File.WriteAllText(d.FileName, ReceptionFiles.Report(), ReceptionFiles.Utf8); notice.Text = "Felrapporten är sparad utan skannade nummer. Dela den med IT."; }
+                if (!TryBeginFileOperation(false)) return;
+                try
+                {
+                    string destination = d.FileName, report = ReceptionFiles.Report(); notice.Text = "Sparar felrapport …";
+                    await Task.Run(delegate { File.WriteAllText(destination, report, ReceptionFiles.Utf8); }); notice.Text = "Felrapporten är sparad utan skannade nummer. Dela den med IT.";
+                }
                 catch (Exception ex) { SaveError(ex); MessageBox.Show(this, "Filen kunde inte sparas. Välj en annan mapp.", "Brickläsaren"); }
+                finally { SetBusy(false); }
             }
         }
         private async Task Recover()
@@ -665,23 +791,47 @@ namespace Tobtech.OmnikeyRco
             catch (Exception ex) { SaveError(ex); SetInstruction("HJÄLP BEHÖVS", "Återställningen är inte klar", "Låt läsaren vara inkopplad. Spara en felrapport via Hjälp och kontakta IT.", true); }
             finally { SetBusy(false); }
         }
-        private void ExportReceptionPackage()
+        private async Task ExportReceptionPackage()
         {
-            if (!IsReady) return;
+            if (busy || !IsReady) return;
             using (FolderBrowserDialog d = new FolderBrowserDialog { Description = "Välj var den färdiga receptionsmappen ska skapas. En ny undermapp skapas." })
             {
                 if (d.ShowDialog(this) != DialogResult.OK) return;
-                string destination = Path.Combine(d.SelectedPath, "Bricklasaren-Reception-" + DateTime.Now.ToString("yyyyMMdd-HHmmss"));
+                if (!TryBeginFileOperation(true)) return;
                 try
                 {
+                    string parent = d.SelectedPath, source = ReceptionFiles.PackagePath;
+                    // Snapshot reader-derived text on the UI thread. The worker only touches files.
                     string profile = reader.Cal == null ? null : ReceptionFiles.ProfileText(reader, address);
-                    ReceptionFiles.CopyPackageFiles(ReceptionFiles.PackagePath, destination);
-                    if (profile != null) ReceptionFiles.WriteAtomic(Path.Combine(destination, ReceptionFiles.ProfileName), profile);
-                    File.WriteAllText(Path.Combine(destination, "Snabbstart.txt"), ReceptionText.QuickStart, ReceptionFiles.Utf8);
+                    notice.Text = "Skapar paketet …";
+                    string destination = await Task.Run(delegate { return ExportPackageFiles(source, parent, profile, ReceptionFiles.CopyPackageFiles); });
                     MessageBox.Show(this, "Receptionspaketet är skapat:\r\n\r\n" + destination + "\r\n\r\nFlytta hela mappen. En eventuell verifierad profil gäller samma läsare. Inga sparade avläsningar eller felloggar följer med.", "Klart", MessageBoxButtons.OK, MessageBoxIcon.Information);
                     notice.Text = profile == null ? "Paketet är skapat med standardformat, utan lokal läsarprofil." : "Paketet är skapat med läsarens verifierade profil.";
                 }
                 catch (Exception ex) { SaveError(ex); MessageBox.Show(this, "Paketet kunde inte skapas. Välj en tom, skrivbar mapp.\r\n\r\n" + ex.Message, "Brickläsaren"); }
+                finally { SetBusy(false); }
+            }
+        }
+        internal static string ExportPackageFiles(string source, string parent, string profile, Action<string, string> copy)
+        {
+            string token = Guid.NewGuid().ToString("N");
+            string staging = Path.Combine(parent, ".bricklasaren-export-" + token);
+            string destination = Path.Combine(parent, "Bricklasaren-" + DateTime.Now.ToString("yyyyMMdd-HHmmss") + "-" + token.Substring(0, 8));
+            if (Directory.Exists(staging) || File.Exists(staging)) throw new IOException("Arbetsmappen finns redan.");
+            Directory.CreateDirectory(staging);
+            try
+            {
+                string package = Path.Combine(staging, "paket");
+                copy(source, package);
+                if (profile != null) ReceptionFiles.WriteAtomic(Path.Combine(package, ReceptionFiles.ProfileName), profile);
+                File.WriteAllText(Path.Combine(package, "Snabbstart.txt"), ReceptionText.QuickStart, ReceptionFiles.Utf8);
+                Directory.Move(package, destination); // Never overwrite a user's existing folder.
+                return destination;
+            }
+            finally
+            {
+                // Only our randomly named, newly created staging directory is eligible for cleanup.
+                try { Directory.Delete(staging, true); } catch (IOException) { } catch (UnauthorizedAccessException) { }
             }
         }
         private async Task ImportProfile()
@@ -771,9 +921,9 @@ namespace Tobtech.OmnikeyRco
                 else if (d.Action == "Shortcut") CreateDesktopShortcut();
                 else if (d.Action == "Connect") { address = d.Address; await ConnectReader(); }
                 else if (d.Action == "Setup") await SetupReader();
-                else if (d.Action == "Report") SaveReport();
+                else if (d.Action == "Report") await SaveReport();
                 else if (d.Action == "Recover") await Recover();
-                else if (d.Action == "Export") ExportReceptionPackage();
+                else if (d.Action == "Export") await ExportReceptionPackage();
                 else if (d.Action == "Import") await ImportProfile();
                 else if (d.Action == "Reference")
                 {
@@ -850,7 +1000,7 @@ namespace Tobtech.OmnikeyRco
             Button test = ActionButton("Kontrollera referensbricka", "Reference"); test.Enabled = protectedOutput && connected && !pending;
             Button restore = ActionButton("Återställ läsaren", "Recover"); restore.Enabled = pending;
             service.Controls.Add(test); service.Controls.Add(restore); Ui.Add(advanced, service);
-            Ui.Add(advanced, Ui.Label("Version 3.5.2 · PowerShell · Programmet läser bricknummer.\r\nTobtech", 9F, false));
+            Ui.Add(advanced, Ui.Label("Version 3.6.0 · PowerShell · Programmet läser bricknummer.\r\nTobtech", 9F, false));
             more.Click += delegate
             {
                 advanced.Visible = !advanced.Visible;
@@ -879,13 +1029,15 @@ namespace Tobtech.OmnikeyRco
         {
             Text = firstRun ? "Välkommen · Välj passersystem" : "Inställningar · Passersystem";
             Font = Ui.GetFont(10F); BackColor = Ui.Paper;
-            StartPosition = FormStartPosition.CenterParent; ClientSize = new Size(535, 390); MinimumSize = new Size(535, 360);
+            StartPosition = FormStartPosition.CenterParent; ClientSize = new Size(535, 340); MinimumSize = new Size(535, 310);
             AutoScaleMode = AutoScaleMode.Dpi; AutoScaleDimensions = new SizeF(96F, 96F); MaximizeBox = false; MinimizeBox = false; AutoScroll = true;
-            TableLayoutPanel root = Ui.Stack(); root.Padding = new Padding(22); Controls.Add(root);
+            Panel scroll = new Panel { Dock = DockStyle.Fill, AutoScroll = true, TabIndex = 0 };
+            TableLayoutPanel root = Ui.Stack(); root.Padding = new Padding(22); scroll.Controls.Add(root); Controls.Add(scroll);
             Ui.Add(root, Ui.Label("Välj passersystem", 19F, true));
             Label intro = Ui.Label(firstRun ? "Gör valet en gång för det här Windows-kontot. Nästa gång används det automatiskt." : "Valet sparas direkt och används även nästa gång du startar programmet.", 10F, false);
             intro.MaximumSize = new Size(470, 0); Ui.Add(root, intro);
             Ui.Add(root, Ui.Label("Passersystem", 10F, true));
+            profiles.Dock = DockStyle.Top; profiles.TabIndex = 0; chips.Dock = DockStyle.Top; chips.TabIndex = 1;
             profiles.Items.AddRange(new object[] { "RCO – MIFARE + EM (mR + eR)", "RCO – kort/lång ID-kod", "Axema VAKA – 14 siffror", "Bewator 2010/Omnis – 13 siffror" });
             Ui.Add(root, profiles); Ui.Add(root, chipLabel);
             chips.Items.AddRange(new object[] { "MIFARE (13,56 MHz)", "EM (125 kHz)" });
@@ -893,7 +1045,9 @@ namespace Tobtech.OmnikeyRco
             details.MaximumSize = new Size(450, 0); details.ForeColor = Ui.Muted; Ui.Add(root, details);
             FlowLayoutPanel row = Ui.Row(); Button cancel = Ui.Button(firstRun ? "Avsluta" : "Avbryt", false);
             save.Text = firstRun ? "Spara och börja" : "Spara inställningar";
-            row.Controls.Add(save); row.Controls.Add(cancel); Ui.Add(root, row);
+            save.AccessibleName = save.Text; save.TabIndex = 0; cancel.TabIndex = 1;
+            row.Controls.Add(save); row.Controls.Add(cancel); row.Dock = DockStyle.Bottom; row.Padding = new Padding(22, 10, 22, 14); row.TabIndex = 1; Controls.Add(row);
+            root.SizeChanged += delegate { Ui.WrapLabels(root); };
             Mode = FormatProfiles.ValidMode(initialMode) ? initialMode : FormatProfiles.Combo;
             Chip = FormatProfiles.ValidChip(initialChip) ? initialChip : "M";
             profiles.SelectedIndex = firstRun ? -1 : Mode == FormatProfiles.Rco ? 1 : Mode == FormatProfiles.Axema ? 2 : Mode == FormatProfiles.Bewator ? 3 : 0;

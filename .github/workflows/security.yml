@@ -24,3 +24,5 @@ jobs:
           persist-credentials: false
       - name: Scan complete Git history and tracked files for secrets
         run: python3 tools/scan-secrets.py
+      - name: Verify release signing rejects mismatched keys and packages
+        run: python3 tools/test-release.py

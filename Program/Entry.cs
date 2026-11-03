@@ -3,8 +3,8 @@
 [assembly: System.Reflection.AssemblyDescription("Läser RCO, Axema VAKA och Bewator med OMNIKEY 5427 CK")]
 [assembly: System.Reflection.AssemblyCompany("Tobtech")]
 [assembly: System.Reflection.AssemblyProduct("Brickläsaren")]
-[assembly: System.Reflection.AssemblyVersion("3.5.2.0")]
-[assembly: System.Reflection.AssemblyFileVersion("3.5.2.0")]
+[assembly: System.Reflection.AssemblyVersion("3.6.0.0")]
+[assembly: System.Reflection.AssemblyFileVersion("3.6.0.0")]
 namespace Tobtech.OmnikeyRco
 {
     using System;
@@ -24,16 +24,22 @@ namespace Tobtech.OmnikeyRco
             try
             {
                 ReceptionFiles.PackagePath = Path.GetFullPath(packagePath);
-                int core = SelfTests.Run();
-                int ui = ReceptionTests.Run();
-                int reliability = selfTest ? ReliabilityTests.Run() : 0;
-                string report = "BRICKLÄSAREN RECEPTION 3.5.2 – POWERSHELL\r\n" +
-                    core + " tester av läsarmotorn godkända.\r\n" +
-                    ui + " tester av receptionslogiken godkända.\r\n" +
-                    reliability + " tester av inställningar och resurshantering godkända.\r\n" +
-                    "Detta är inte ett prov mot fysisk läsare eller ett visuellt Windows-test.\r\n";
-                ReceptionFiles.WriteAtomic(Path.Combine(ReceptionFiles.DataPath, "sjalvtest-reception.txt"), report);
-                if (selfTest) return 0;
+                // Regression tests create isolated temporary files. Run them only when
+                // explicitly requested by CI, the installer, or IT via -SelfTestOnly.
+                // Real reader responses are still validated by the normal read path.
+                if (selfTest)
+                {
+                    int core = SelfTests.Run();
+                    int ui = ReceptionTests.Run();
+                    int reliability = ReliabilityTests.Run();
+                    string report = "BRICKLÄSAREN RECEPTION 3.6.0 – POWERSHELL\r\n" +
+                        core + " tester av läsarmotorn godkända.\r\n" +
+                        ui + " tester av receptionslogiken godkända.\r\n" +
+                        reliability + " tester av inställningar och resurshantering godkända.\r\n" +
+                        "Detta är inte ett prov mot fysisk läsare eller ett visuellt Windows-test.\r\n";
+                    ReceptionFiles.WriteAtomic(Path.Combine(ReceptionFiles.DataPath, "sjalvtest-reception.txt"), report);
+                    return 0;
+                }
                 try { SetProcessDPIAware(); } catch (EntryPointNotFoundException) { } catch (DllNotFoundException) { }
                 Application.SetUnhandledExceptionMode(UnhandledExceptionMode.ThrowException);
                 ReceptionProgram.Run(packagePath);

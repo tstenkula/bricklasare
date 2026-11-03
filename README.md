@@ -21,6 +21,7 @@ Standard formats work without a reference tag. A previously verified local overr
 - Persistent access-system selection and optional local color/logo settings. The default is **Marinblå**, `#003B55`, with no organization branding.
 - Optional automatic clipboard copy after a completed scan and verified reader restoration; optional place/remove/completion sounds. No tag register or scan history.
 - Ctrl+R / ⌘R reads, Escape cancels, Ctrl/⌘+1/2 copies the first/second output and Ctrl/⌘+3 copies both outputs in MIFARE + EM mode.
+- **Rensa** clears the visible result without starting another read. It only clears the clipboard if it still contains the app's own last copied text.
 - Guided connection diagnostics and a report that excludes tag numbers, private profiles and secrets.
 - USB changes and wake events invalidate old results and schedule a fresh connection check after ongoing recovery has finished.
 - Signed update feeds with stable and preview channels. Checking never installs silently. See [Updates/README.md](Updates/README.md).
@@ -35,5 +36,7 @@ Mac: `Mac/build.sh`, followed by `dist/Bricklasaren.app/Contents/MacOS/Bricklasa
 CI compiles both platforms, runs offline reader simulations, update verification and settings/resource tests, and builds packages. Hardware behavior and a full-day USB/memory soak still require a real reader. macOS builds are ad-hoc signed for Apple Silicon; they are not Developer ID signed or notarized. Windows publisher warnings are not removed by this release. Update-feed signatures authenticate downloads separately from operating-system code signing.
 
 Version 3.5.2 also verifies signed update metadata at installation, binds Windows reader traffic to the identified USB network adapter, and checks malformed native responses with memory sanitizers. Free local/CI secret scanning, release controls and remaining trust limits are documented in [SECURITY.md](SECURITY.md).
+
+Version 3.6.0 refines the reader workspace and result states, restores predictable keyboard focus, and avoids running the regression-test suite during normal Windows startup. Large custom logos use smaller display copies while the saved original is retained.
 
 `SHA256SUMS.txt` covers repository files. Update feeds cover release archives. The release signing private key is never stored in this repository or in an application.

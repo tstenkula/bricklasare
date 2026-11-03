@@ -33,7 +33,7 @@ jobs:
         run: Mac/build.sh
 
       - name: Verify updater archive
-        run: dist/Bricklasaren.app/Contents/MacOS/Bricklasaren --verify-update-archive dist/Bricklasaren-3.5.2-macOS-AppleSilicon.zip
+        run: dist/Bricklasaren.app/Contents/MacOS/Bricklasaren --verify-update-archive dist/Bricklasaren-3.6.0-macOS-AppleSilicon.zip
 
       - name: Run offline application tests
         run: dist/Bricklasaren.app/Contents/MacOS/Bricklasaren --self-test
@@ -47,8 +47,8 @@ jobs:
         with:
           name: macOS-AppleSilicon
           path: |
-            dist/Bricklasaren-3.5.2-macOS-AppleSilicon.dmg
-            dist/Bricklasaren-3.5.2-macOS-AppleSilicon.zip
+            dist/Bricklasaren-3.6.0-macOS-AppleSilicon.dmg
+            dist/Bricklasaren-3.6.0-macOS-AppleSilicon.zip
             ${{ runner.temp }}/bricklasare-mac-ui
           if-no-files-found: error
           retention-days: 3

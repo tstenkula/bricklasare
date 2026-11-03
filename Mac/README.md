@@ -1,10 +1,10 @@
 # Brickläsaren för macOS
 
-Native Swift/AppKit version of Brickläsaren 3.5.2, for **Apple Silicon (arm64), macOS 13 or later**. It implements the Windows operator workflow and number formats with a native USB/PC/SC transport. There is no PowerShell, .NET, browser, background service, Python installation, Intel binary or Windows EEM driver at runtime.
+Native Swift/AppKit version of Brickläsaren 3.6.0, for **Apple Silicon (arm64), macOS 13 or later**. It implements the Windows operator workflow and number formats with a native USB/PC/SC transport. There is no PowerShell, .NET, browser, background service, Python installation, Intel binary or Windows EEM driver at runtime.
 
 ## Install and run
 
-Open `Bricklasaren-3.5.2-macOS-AppleSilicon.dmg`, drag `Bricklasaren.app` to **Program / Applications**, and open it. Connect one OMNIKEY 5427 CK or Gen2 without a tag on it. Approve the USB accessory if macOS requests it. Select the access system on first launch; no system is preselected. The choice and RCO chip selection persist per user.
+Open `Bricklasaren-3.6.0-macOS-AppleSilicon.dmg`, drag `Bricklasaren.app` to **Program / Applications**, and open it. Connect one OMNIKEY 5427 CK or Gen2 without a tag on it. Approve the USB accessory if macOS requests it. Select the access system on first launch; no system is preselected. The choice and RCO chip selection persist per user.
 
 The app uses an ad-hoc signature for execution on Apple Silicon. It is not Developer ID signed or notarized. A downloaded copy may require **System Settings → Privacy & Security → Open Anyway** after the first opening attempt. Do not disable Gatekeeper globally. See [Apple's instructions](https://support.apple.com/en-us/102445).
 
@@ -31,7 +31,7 @@ Update checks are optional and installation requires confirmation. There is no t
 
 ## USB implementation and boundaries
 
-The bridge in `Sources/NativeReader.c` owns PC/SC contexts and handles and releases IOKit/CF objects. All device operations execute on one serial worker queue. UI updates run on the main thread. Only one supported physical USB device may be attached. USB matching uses VID `076B`, PIDs `5427`/`5428`; board type must subsequently be `06` or `0A`, with a 16-byte reader ID and 4-byte firmware value.
+The bridge in `Sources/NativeReader.c` owns PC/SC contexts and handles and releases IOKit/CF objects. Reader commands execute on one serial worker queue. Periodic USB discovery uses a separate background queue with no overlapping probes; a timeout invalidates readiness and results, and late responses cannot restore stale state. UI updates run on the main thread. Only one supported physical USB device may be attached. USB matching uses VID `076B`, PIDs `5427`/`5428`; board type must subsequently be `06` or `0A`, with a 16-byte reader ID and 4-byte firmware value.
 
 Connection uses `SCARD_SHARE_DIRECT` and the CCID escape feature reported by `GET_FEATURE_REQUEST`. If no usable negotiated channel exists, read-only discovery tries the documented escape control and libccid's escape control. A mutating request is never retried across different channels. MIB commands, ATR presence parsing, card APDUs, polling settings and number conversions follow the Windows implementation. Card presence uses the reader's ATR MIB, including LF; it does not rely on the operating system exposing an EM tag as a smart card.
 
