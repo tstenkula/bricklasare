@@ -92,8 +92,10 @@ namespace Tobtech.OmnikeyRco
         private static void StyleButton(Button button)
         {
             bool primary = Object.Equals(button.Tag, "primary");
-            button.BackColor = primary ? (button.Enabled ? Accent : Color.FromArgb(220, 230, 235)) : Color.White;
-            button.ForeColor = primary ? (button.Enabled ? Theme.ButtonText : Muted) : Ink;
+            button.BackColor = primary ? (button.Enabled ? Accent : Color.FromArgb(220, 230, 235)) : (button.Enabled ? Color.White : Paper);
+            button.ForeColor = primary ? (button.Enabled ? Theme.ButtonText : Muted) : (button.Enabled ? Ink : Muted);
+            button.FlatAppearance.BorderColor = button.Enabled ? Color.FromArgb(186, 200, 203) : Color.FromArgb(220, 230, 235);
+            button.Cursor = button.Enabled ? Cursors.Hand : Cursors.Default;
             button.FlatAppearance.MouseOverBackColor = primary ? Theme.Hover : AccentLight;
             button.FlatAppearance.MouseDownBackColor = primary ? Theme.Hover : AccentLight;
         }
