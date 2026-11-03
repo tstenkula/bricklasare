@@ -108,39 +108,10 @@ namespace Tobtech.OmnikeyRco
 
         private static byte[] Send(string address, string cmd)
         {
-            // Keep the existing EEM command transport local; never follow redirects or a system proxy.
             IPAddress ip;
-            if (!IPAddress.TryParse(address, out ip) || ip.AddressFamily != System.Net.Sockets.AddressFamily.InterNetwork)
+            if (!IPAddress.TryParse(address, out ip) || !ReaderNetwork.IsPrivate(ip))
                 throw new InvalidOperationException("Ogiltig lokal läsaradress.");
-            byte[] b = ip.GetAddressBytes();
-            if (!(b[0] == 10 || (b[0] == 172 && b[1] >= 16 && b[1] <= 31) || (b[0] == 192 && b[1] == 168) || (b[0] == 169 && b[1] == 254)))
-                throw new InvalidOperationException("Endast lokala nätadresser är tillåtna.");
-            HttpWebRequest request = (HttpWebRequest)WebRequest.Create("http://" + ip.ToString() + "/cjax");
-            request.Method = "POST"; request.ContentType = "application/x-www-form-urlencoded";
-            request.Timeout = 3000; request.ReadWriteTimeout = 3000; request.Proxy = null;
-            request.KeepAlive = false; request.AllowAutoRedirect = false;
-            request.ServicePoint.Expect100Continue = false;
-            byte[] body = Encoding.ASCII.GetBytes(cmd); request.ContentLength = body.Length;
-            try
-            {
-                using (Stream stream = request.GetRequestStream()) stream.Write(body, 0, body.Length);
-                using (HttpWebResponse response = (HttpWebResponse)request.GetResponse())
-                {
-                    if (response.StatusCode != HttpStatusCode.OK) throw new IOException("Läsaren svarade inte OK.");
-                    using (StreamReader reader = new StreamReader(response.GetResponseStream(), Encoding.UTF8))
-                    {
-                        char[] buffer = new char[16385]; int count = 0, read;
-                        while (count < buffer.Length && (read = reader.Read(buffer, count, buffer.Length - count)) > 0) count += read;
-                        if (count == buffer.Length) throw new InvalidDataException("Oväntat stort svar från läsaren.");
-                        return Codec.HttpResponse(new String(buffer, 0, count));
-                    }
-                }
-            }
-            catch (WebException ex)
-            {
-                if (ex.Response != null) ex.Response.Close();
-                throw;
-            }
+            return Codec.HttpResponse(ReaderNetwork.Send(ip, cmd));
         }
 
         public static ReaderClient EnsureProtected(ReaderClient reader, string address, string dataPath, LocalLog log, Action<string> progress)
@@ -294,9 +265,9 @@ namespace Tobtech.OmnikeyRco
                 catch (IOException ex)
                 {
                     last = ex;
-                    // ReaderClient wraps WebException in IOException. A protocol error is not evidence of reboot.
+                    // Only a missing USB interface or transport disconnect counts. Invalid protocol data does not.
                     WebException network = ex.InnerException as WebException;
-                    if (network != null && IsDisconnect(network)) observedDisconnect = true;
+                    if (ex is ReaderNetworkDisconnectedException || (network != null && IsDisconnect(network))) observedDisconnect = true;
                 }
                 Thread.Sleep(500);
             }

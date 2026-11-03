@@ -1,4 +1,4 @@
-BRICKLÄSAREN 3.5.1 – TESTSTATUS
+BRICKLÄSAREN 3.5.2 – TESTSTATUS
 
 Aktuella körningar och byggresultat:
 https://github.com/tstenkula/bricklasare/actions
@@ -8,6 +8,12 @@ Mac byggs för Apple Silicon/macOS 13+ och kontrolleras på macOS 15.
 Inbyggda tester omfattar simulerad läsning, återställning, privata
 inställningar, signerade uppdateringar och upprepad fönsterhantering.
 Alla testnummer är syntetiska. Ingen fysisk läsare eller drivrutin används.
+
+Från 3.5.2 provas även manipulerade installationsplaner, bindning till
+verifierad USB-nätverksanslutning och felaktiga HTTP-svar. Mac-versionens
+native-kod provas separat med AddressSanitizer/UndefinedBehaviorSanitizer
+och en deterministisk uppsättning felaktiga svar. Hemlighetsskanning
+körs lokalt och i CI med den kostnadsfria Gitleaks-klienten.
 
 Kör IT/Kor-sjalvtester.cmd för Windows-tester. Se Mac/VERIFIERING.md
 för Mac och IT/Verifiering.txt för kvarvarande hårdvaruprov.

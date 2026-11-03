@@ -32,6 +32,7 @@
             try
             {
                 Application.EnableVisualStyles(); Application.SetCompatibleTextRenderingDefault(false);
+                count += ReaderNetworkTests.Run();
                 ExerciseUpdates(directory);
                 ExerciseFirstStart(Path.Combine(directory, "first-start"));
                 LocalLog log = new LocalLog(); log.Add("old-entry");
@@ -229,12 +230,19 @@
             byte[] fixture = Convert.FromBase64String("QlJJQ0tMQVNBUkUtVVBEQVRFLTEKZXlKVFkyaGxiV0VpT2pFc0lrTm9ZVzV1Wld3aU9pSndjbVYyYVdWM0lpd2lWMmx1Wkc5M2N5STZleUpXWlhKemFXOXVJam9pT1RrdU1TNHdJaXdpVlhKc0lqb2lhSFIwY0hNNkx5OW5hWFJvZFdJdVkyOXRMM1J6ZEdWdWEzVnNZUzlpY21samEyeGhjMkZ5WlM5eVpXeGxZWE5sY3k5a2IzZHViRzloWkM5MFpYTjBMMlpwZUhSMWNtVXVlbWx3SWl3aVUyaGhNalUySWpvaVpqRTJaREExWldNMllqSTVNalE0WkRKak5qRmhaR0l4WlRreU5qTm1OemhsTkdZM1ltRmpaVEZpT1RVMU1ERTBZVEprTVRjNE56SmpabVUwTURZMFpDSXNJbE5wZW1VaU9qY3NJazV2ZEdWeklqb2lVM2x1ZEdobGRHbGpJSFJsYzNRZ1ptbDRkSFZ5WlRzZ2JtVjJaWElnWkc5M2JteHZZV1JsWkM0aWZTd2lUV0ZqSWpwN0lsWmxjbk5wYjI0aU9pSTVPUzR4TGpBaUxDSlZjbXdpT2lKb2RIUndjem92TDJkcGRHaDFZaTVqYjIwdmRITjBaVzVyZFd4aEwySnlhV05yYkdGellYSmxMM0psYkdWaGMyVnpMMlJ2ZDI1c2IyRmtMM1JsYzNRdlptbDRkSFZ5WlM1NmFYQWlMQ0pUYUdFeU5UWWlPaUptTVRaa01EVmxZelppTWpreU5EaGtNbU0yTVdGa1lqRmxPVEkyTTJZM09HVTBaamRpWVdObE1XSTVOVFV3TVRSaE1tUXhOemczTW1ObVpUUXdOalJrSWl3aVUybDZaU0k2Tnl3aVRtOTBaWE1pT2lKVGVXNTBhR1YwYVdNZ2RHVnpkQ0JtYVhoMGRYSmxPeUJ1WlhabGNpQmtiM2R1Ykc5aFpHVmtMaUo5ZlE9PQpBc0pXSEJXTFB3M0VIRWNrT244Z0IydFM3ODNzY1BhRUlMQkYvL24xMTNqRjE1QmRHektMTnN3QzdmN3hSRnA5ZVRSSEtwSWlFTGg3L1A3WXE5U3NPcHV2cVppUGorS2RnbG8rTG52MzUzZHJJa0pNMG9tMklZUlJKOEJ3RTQ3N2NRWHpVQTJFSGplYncvWnRLS3ZEaFdBREN3cGw1UlpKS0kyWVUyOXk5blhVbjFDLzhYR2d5UU9ld1BDbDZaNVVPMHROeW5JdHRjMTdxVTJWckFnUGVDYUxIWmhTdG9VaEs5a3NlaUx3UDFtMk1YMkNheEllMFFkM2dPaDdBdlkrY0NaYmJQWE53N05hV2FrV1B6VXc0M1ZTTUdWRmRTYXVXblRROExQWnd6YmZDWE9VMnpPZnhmYitFQ2F3QmdsQ1dvVm1pV3pkeVBWNzc1b05KM3BMN0krU0tmV0tHcGFGVEljNmdoUUQraE9QNWdZZ2pLUUJaQkh4VUEwWE96UW5WSjlHYml5U2Q1TGRyRW9LNU9yZS9COTdickN6RXJtZXR3T2p1NVNnSnRJY0Y0SUVjcEYrQ0E4RWhNZmJWaXdEekFaQUlybHhXc2dMU3NuRXdKKzR2T3VtUUxZdkRPT0FSR0s4T2JqQkZmcGhZSUYwdDdNNnk1enNLMHhsSXRIZgo=");
             UpdateAsset asset = Updates.Decode(fixture, "preview");
             Check(asset.Version == "99.1.0", "Signed feed accepted");
+            Check(Updates.Authenticate(asset).Version == asset.Version, "Signed offer reauthenticated before staging");
+            UpdateAsset noEnvelope = new UpdateAsset { Version = asset.Version, Url = asset.Url, Sha256 = asset.Sha256, Size = asset.Size };
+            Reject(delegate { Updates.Authenticate(noEnvelope); }, "Unsigned offer rejected before staging");
+            UpdateAsset substituted = Updates.Decode(fixture, "preview"); substituted.Version = "99.2.0";
+            Reject(delegate { Updates.Authenticate(substituted); }, "Mutable offer cannot replace signed version");
+            substituted = Updates.Decode(fixture, "preview"); substituted.Sha256 = new string('0', 64);
+            Reject(delegate { Updates.Authenticate(substituted); }, "Mutable offer cannot replace signed package hash");
             Reject(delegate { Updates.Decode(fixture, "stable"); }, "Channel substitution rejected");
             byte[] changed = (byte[])fixture.Clone(); changed[40] ^= 1;
             Reject(delegate { Updates.Decode(changed, "preview"); }, "Tampered feed rejected");
             Updates.VerifyPackage(System.Text.Encoding.UTF8.GetBytes("fixture"), asset);
             Reject(delegate { Updates.VerifyPackage(System.Text.Encoding.UTF8.GetBytes("changed"), asset); }, "Tampered archive rejected");
-            foreach (string v in new string[] { "3.5", "3.5.1.1", "3.5.-1", "65536.0.0", "3.5.1\n", "x.0.0" }) Reject(delegate { Updates.ParseVersion(v); }, "Invalid version rejected");
+            foreach (string v in new string[] { "3.5", "3.5.2.1", "3.5.-1", "65536.0.0", "3.5.2\n", "x.0.0" }) Reject(delegate { Updates.ParseVersion(v); }, "Invalid version rejected");
             Check(Updates.ParseVersion("3.10.0") > Updates.ParseVersion("3.9.0"), "Numeric version comparison");
             Check(!new WorkflowSettings().Sounds && new WorkflowSettings().Copy == 0, "Sounds and automatic clipboard opt in");
             Check(WorkflowSettings.CopyValue(2, "123", "—", false) == "", "Missing second number not copied");

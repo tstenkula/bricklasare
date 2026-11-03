@@ -6,6 +6,7 @@ Lokalt verifierad 2026-11-03 på Apple Silicon med macOS 27.2 och Swift 6.4.2. B
 - Offlinekontroller omfattar nummerformat, läsning, identitet, avbrott/återställning, inställningar, signerade uppdateringsfiler och ZIP-kontroller. Endast syntetiska nummer används.
 - Resursprovet kör 100 livscykler med inställningsfönster och ombyggnad av huvudfönstret. Fönsterantal och minnesfotavtryck skrivs till testresultatet. Detta är en avgränsad regressionstest, inte bevis för att alla tänkbara läckor saknas.
 - Uppdateringens filbyte provas i en tillfällig katalog med lyckat byte och framtvingat fel: föregående version och personliga filer ska finnas kvar.
+- `Mac/Tests/run-native-security-tests.sh` provar rapporterade längder, läsarlistor och feature-svar med AddressSanitizer/UndefinedBehaviorSanitizer, utan fysisk läsare. Installationsproven avvisar manipulerad signerad information och utbytta paket även om en lokal plans kontrollsumma ändras.
 - GitHub bygger på macOS 15; lokal utveckling sker på Apple Silicon med macOS 27.2. Aktuella resultat finns under repoets Actions.
 - Källkod och paket ska inte innehålla lokala läsarprofiler, verkliga kortnummer, personliga inställningar, loggar eller privata nycklar.
 

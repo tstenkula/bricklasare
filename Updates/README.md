@@ -11,6 +11,7 @@ Vid start kan programmet söka efter en nyare version. Automatisk kontroll kan s
 - RSA-3072/SHA-256-signaturen verifieras mot en publik nyckel inbyggd i programmet innan uppdateringsinformationen används.
 - Endast HTTPS och GitHubs nedladdningsservrar tillåts. Versioner jämförs numeriskt; samma eller äldre version installeras inte genom dialogen.
 - Paketets storlek och SHA-256 kontrolleras. ZIP-sökvägar, länkar och orimliga storlekar avvisas.
+- Från 3.5.2 sparas den ursprungliga signerade kanalfilen. Installationshjälpen verifierar signaturen igen och hämtar version och kontrollsumma ur det signerade innehållet. En ändrad lokal installationsplan kan inte ersätta dessa värden. Uppackning använder samma verifierade paketbytes som kontrollerades.
 - En separat hjälpprocess väntar tills programmet avslutats, låser installationen och testar den nya versionen innan programmappen ersätts. Windows använder fortsatt PowerShell, utan egen EXE och utan ändrad säkerhetspolicy.
 - En `.previous-…`-kopia av föregående program behålls. Misslyckas själva mappbytet läggs den tillbaka. Det är ingen automatisk återställning efter alla tänkbara fel i en nystartad version; den sparade kopian kan startas manuellt.
 - Personliga inställningar ligger utanför programmappen och bevaras. Mac-appar på en monterad DMG behöver först flyttas till en skrivbar Program-mapp. Windows programmapp och dess förälder behöver vara skrivbara; ingen automatisk administratörshöjning görs.
@@ -18,13 +19,15 @@ Vid start kan programmet söka efter en nyare version. Automatisk kontroll kan s
 
 Detta är **paketverifiering**, inte Windows Authenticode eller Apple Developer ID/notarisering. Det tar inte bort operativsystemets varningar om utgivare.
 
+Övergången från 3.5.1 använder den redan installerade versionens installationshjälp. Den extra kontrollen i sista installationssteget gäller uppdateringar som startas från 3.5.2 och senare. En nyinstallation av 3.5.2 innehåller hela skyddet. Användarens skrivbehörighet, den ursprungliga appens äkthet och signeringsnyckelns skydd är fortfarande viktiga.
+
 ## Släppa en version
 
-1. Höj versionsnumret på båda plattformarna. Kör testerna och bygg Windows ZIP, Mac ZIP och DMG från samma verifierade källa. Publicera arkiven som en GitHub Release i `tstenkula/bricklasare`.
+1. Höj versionsnumret på båda plattformarna och i Windows installationshjälp. Kör testerna och bygg Windows ZIP, Mac ZIP och DMG från samma verifierade källa. Skapa först en utgåva som utkast i `tstenkula/bricklasare`, ladda upp samtliga arkiv och kontrollsummor, verifiera innehållet och publicera sedan. Nya publicerade utgåvors filer och taggar är låsta genom GitHubs release immutability.
 2. Signera kanalfilen lokalt med `tools/release.py`. Exempel:
 
    ```sh
-   python3 tools/release.py --key /secure/path/update-signing.pem --channel preview --version 3.5.1 --tag v3.5.1-preview.1 --windows dist/Bricklasaren-3.5.1-Windows.zip --mac dist/Bricklasaren-3.5.1-macOS-AppleSilicon.zip --output Updates/preview.feed
+   python3 tools/release.py --key /secure/path/update-signing.pem --channel preview --version 3.5.2 --tag v3.5.2-preview.1 --windows dist/Bricklasaren-3.5.2-Windows.zip --mac dist/Bricklasaren-3.5.2-macOS-AppleSilicon.zip --output Updates/preview.feed
    ```
 
 3. Kontrollera att arkivens hash stämmer mot GitHub, uppdatera källfilernas kontrollsummor och skicka kanalfilen genom granskning till `main`. Flytta inte en befintlig release till annat innehåll efter publicering.

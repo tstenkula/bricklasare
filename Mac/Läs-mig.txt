@@ -1,4 +1,4 @@
-Brickläsaren 3.5.1 för Mac · Apple Silicon
+Brickläsaren 3.5.2 för Mac · Apple Silicon
 
 Kräver macOS 13 eller senare och en OMNIKEY 5427 CK eller 5427 CK Gen2.
 Intel-Mac stöds inte.

@@ -1,4 +1,4 @@
-﻿// Reception v3.5.1 (PowerShell). Reader protocol remains in OmnikeyCore.cs.
+﻿// Reception v3.5.2 (PowerShell). Reader protocol remains in OmnikeyCore.cs.
 namespace Tobtech.OmnikeyRco
 {
     using System;
@@ -35,7 +35,7 @@ namespace Tobtech.OmnikeyRco
                 return new string[] {
                     LauncherName,
                     "Program/Starta-Bricklasaren.ps1", "Program/Bricklasaren.ico",
-                    "Program/Entry.cs", "Program/OmnikeyCore.cs",
+                    "Program/Entry.cs", "Program/OmnikeyCore.cs", "Program/ReaderNetwork.cs", "Program/ReaderNetworkTests.cs",
                     "Program/FirstStart.cs", "Program/Appearance.cs", "Program/SettingsDialogs.cs", "Program/ReliabilityTests.cs",
                     "Program/ReceptionSupport.cs", "Program/ReaderSafety.cs", "Program/ReceptionApp.cs",
                     "START-HAR.txt", "Snabbstart.txt",
@@ -208,8 +208,8 @@ namespace Tobtech.OmnikeyRco
         {
             lock (errorGate)
             {
-                return "BRICKLÄSAREN RECEPTION 3.5.1 – POWERSHELL\r\n" +
-                    "Läsarmotor: v3.5.1, standardformat med frivillig lokal IT-kalibrering.\r\n" +
+                return "BRICKLÄSAREN RECEPTION 3.5.2 – POWERSHELL\r\n" +
+                    "Läsarmotor: v3.5.2, standardformat med frivillig lokal IT-kalibrering.\r\n" +
                     "Rapport skapad: " + DateTime.Now.ToString("s") + "\r\n" +
                     "Inga skannade nummer, råsvar eller undantagsmeddelanden ingår.\r\n\r\n" +
                     (errorSummaries.Count == 0 ? "Inga fel registrerade under denna programkörning." : String.Join("\r\n", errorSummaries.ToArray()));
@@ -317,7 +317,7 @@ namespace Tobtech.OmnikeyRco
         {
             get
             {
-                return "BRICKLÄSAREN 3.5.1\r\n\r\n" +
+                return "BRICKLÄSAREN 3.5.2\r\n\r\n" +
                     "Starta med " + ReceptionFiles.LauncherName + ".\r\n" +
                     "Första gången väljer du vilket passersystem du ska läsa för.\r\n" +
                     "Valet sparas direkt och används automatiskt vid nästa start.\r\n" +

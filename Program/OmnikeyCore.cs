@@ -274,37 +274,11 @@ namespace Tobtech.OmnikeyRco
         {
             log.Transport(false, command.Length);
             if (TestTransport != null) return TestTransport(command);
-            HttpWebRequest request = (HttpWebRequest)WebRequest.Create(endpoint);
-            request.Method = "POST"; request.ContentType = "application/x-www-form-urlencoded";
-            request.Timeout = 3000; request.ReadWriteTimeout = 3000;
-            request.Proxy = null; request.AllowAutoRedirect = false; request.KeepAlive = false;
-            request.ServicePoint.Expect100Continue = false;
-            byte[] body = Encoding.ASCII.GetBytes(command); request.ContentLength = body.Length;
-            try
-            {
-                using (Stream s = request.GetRequestStream()) s.Write(body, 0, body.Length);
-                string text;
-                using (HttpWebResponse response = (HttpWebResponse)request.GetResponse())
-                {
-                    if (response.StatusCode != HttpStatusCode.OK) throw new IOException("HTTP " + (int)response.StatusCode + ".");
-                    using (StreamReader reader = new StreamReader(response.GetResponseStream(), Encoding.UTF8))
-                    {
-                        char[] buffer = new char[16385]; int count = 0, read;
-                        while (count < buffer.Length && (read = reader.Read(buffer, count, buffer.Length - count)) > 0) count += read;
-                        if (count == buffer.Length) throw new IOException("Oväntat stort svar från läsaren.");
-                        text = new String(buffer, 0, count);
-                    }
-                }
-                log.Transport(true, text.Length);
-                return Codec.HttpResponse(text);
-            }
-            catch (WebException ex)
-            {
-                log.Add("HTTP-FEL " + ex.Status);
-                if (ex.Response != null) ex.Response.Close();
-                throw new IOException("Ingen fungerande kommandokontakt med läsaren. Kontrollera USB, EEM-drivrutin och IP-adress. " + ex.Message, ex);
-            }
+            string text = ReaderNetwork.Send(IPAddress.Parse(endpoint.Host), command);
+            log.Transport(true, text.Length);
+            return Codec.HttpResponse(text);
         }
+
         public Tlv GetMib(string oid) { return Codec.MibResponse(oid, Send(Codec.GetMibCommand(oid))); }
         private static bool Allowed(string oid) { return oid == AskDataOid || Polls.Any(delegate(PollSetting p) { return p.Oid == oid; }); }
         private static void ValidateSaved(SavedSetting s)

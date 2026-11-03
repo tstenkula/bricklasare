@@ -6,13 +6,17 @@ import Security
 struct UpdateAsset: Codable {
   let Version: String, Url: String, Sha256: String, Size: Int
   let Notes: String?
+  // Not encoded into plans: the original signed bytes must remain the authority.
+  var signedFeed: Data? = nil
+  var channel: String? = nil
+  enum CodingKeys: String, CodingKey { case Version, Url, Sha256, Size, Notes }
 }
 struct UpdateFeed: Codable {
   let Schema: Int, Channel: String
   let Windows: UpdateAsset?, Mac: UpdateAsset?
 }
 struct UpdatePlan: Codable {
-  let target: String, directory: String, parent: Int32, asset: UpdateAsset
+  let target: String, directory: String, parent: Int32, channel: String
 }
 final class UpdateDownload: NSObject, URLSessionDataDelegate {
   var bytes = Data(), failure: Error?
@@ -76,7 +80,7 @@ final class UpdateDownload: NSObject, URLSessionDataDelegate {
   }
 }
 enum Updates {
-  static let current = "3.5.1"
+  static let current = "3.5.2"
   static let publicKey =
     "MIIBigKCAYEAn8JTA0cbbRrraGNb11fX4Dyanoa8S9TzTBGl8Edfagx743HROUj9lDCwJvuVF6cNpH4mB2dN33O+XfYKZMrUaJ0K/3Q9gmPLqedlvbpuHWlEaeUzekdT4Npo7EZpwo+Cwcxjlmlahgoll1MkjEu8QERzAQEeuTB4vZCsKdXdYcRlKAQuPEKqCWkiH49prMDvVdqUUYLl2TPLcHPD8MDdkbFh/glWJDTRB1No++PCUU8PVG80X94BnMe1E/+LLyTjxaNYVSsIFZlD9XX3eup7t/UTKUk9RC1u8WY23l74ccXwy71lirntfOFW6MdK4kFsIGOk+2PF/QGwoIcpwfhSt7+Id0y85VGEqe002CngsfxUQ7BkAAAB2+D4vPcU3FBLkleYkG5B+WXasbCslTGFXG+hnFpTU2R5XQECRJ2UXjuJN/lDaw8AE7dwUTTfibfYGs9mAUZ6nECBsL3OmpXtCK9ZyTHx2AWs+hvXP+7hzcluf12K2H4MveyyNcOFSNedAgMBAAE="
   static let unavailable =
@@ -127,8 +131,11 @@ enum Updates {
     let feed = try JSONDecoder().decode(UpdateFeed.self, from: payload)
     try require(
       feed.Schema == 1 && feed.Channel == channel, "Uppdateringen tillhör en annan kanal.")
-    if let asset = feed.Mac { try validate(asset) }
-    return feed.Mac
+    guard var asset = feed.Mac else { return nil }
+    try validate(asset)
+    asset.signedFeed = bytes
+    asset.channel = channel
+    return asset
   }
   static func check(_ channel: String) throws -> UpdateAsset? {
     try require(["stable", "preview"].contains(channel), "Ogiltig kanal.")
@@ -138,6 +145,44 @@ enum Updates {
           string:
             "https://raw.githubusercontent.com/tstenkula/bricklasare/main/Updates/\(channel).feed")!,
         maximum: 65536), channel: channel)
+  }
+  static func authenticated(_ offered: UpdateAsset) throws -> UpdateAsset {
+    guard let envelope = offered.signedFeed, let channel = offered.channel,
+      let signed = try decode(envelope, channel: channel)
+    else { throw fail("UPDATE_SIGNATURE", "Signerad uppdateringsinformation saknas.") }
+    try require(
+      signed.Version == offered.Version && signed.Url == offered.Url
+        && signed.Sha256 == offered.Sha256 && signed.Size == offered.Size,
+      "Uppdateringsinformationen har ändrats.")
+    try require(
+      try version(current).lexicographicallyPrecedes(version(signed.Version)),
+      "Uppdateringen är inte nyare än den installerade versionen.")
+    return signed
+  }
+  static func readRegular(_ url: URL, maximum: Int) throws -> Data {
+    let fd = open(url.path, O_RDONLY | O_NOFOLLOW | O_CLOEXEC)
+    try require(fd >= 0, "Uppdateringsfilen kunde inte öppnas.")
+    let handle = FileHandle(fileDescriptor: fd, closeOnDealloc: true)
+    defer { try? handle.close() }
+    var info = stat()
+    try require(
+      fstat(fd, &info) == 0 && (info.st_mode & S_IFMT) == S_IFREG
+        && info.st_size > 0 && info.st_size <= maximum,
+      "Uppdateringsfilen är ogiltig eller för stor.")
+    let bytes = try handle.read(upToCount: maximum + 1) ?? Data()
+    try require(!bytes.isEmpty && bytes.count <= maximum, "Uppdateringsfilen är för stor.")
+    return bytes
+  }
+  // Both the final installer and its regression tests use this exact trust boundary.
+  static func installPackage(_ directory: URL, channel: String) throws -> (UpdateAsset, Data) {
+    let envelope = try readRegular(directory.appendingPathComponent("release.feed"), maximum: 65536)
+    guard let signed = try decode(envelope, channel: channel) else {
+      throw fail("UPDATE_SIGNATURE", "Uppdateringen saknar ett signerat paket.")
+    }
+    let asset = try authenticated(signed)
+    let bytes = try readRegular(directory.appendingPathComponent("package.zip"), maximum: 52_428_800)
+    try verify(bytes, asset: asset)
+    return (asset, bytes)
   }
   static func pending(_ store: Store) -> Bool {
     store.files().contains {
@@ -221,22 +266,40 @@ enum Updates {
     }
     try require(offset == end, "Trasigt ZIP-paket.")
   }
-  static func run(_ path: String, _ arguments: [String], timeout: TimeInterval = 120) throws {
+  static func run(_ path: String, _ arguments: [String], timeout: TimeInterval = 120, input: Data? = nil) throws {
     let process = Process()
     process.executableURL = URL(fileURLWithPath: path)
     process.arguments = arguments
     process.standardOutput = FileHandle.nullDevice
     process.standardError = FileHandle.nullDevice
+    let pipe = input.map { _ in Pipe() }
+    if let pipe {
+      try require(fcntl(pipe.fileHandleForWriting.fileDescriptor, F_SETNOSIGPIPE, 1) == 0,
+        "Kunde inte förbereda paketkontrollen.")
+      process.standardInput = pipe
+    }
     let done = DispatchSemaphore(value: 0)
     process.terminationHandler = { _ in done.signal() }
     try process.run()
+    if let input, let pipe {
+      try? pipe.fileHandleForReading.close()
+      DispatchQueue.global(qos: .utility).async {
+        defer { try? pipe.fileHandleForWriting.close() }
+        try? pipe.fileHandleForWriting.write(contentsOf: input)
+      }
+    }
     if done.wait(timeout: .now() + timeout) != .success {
-      process.terminate()
+      if process.isRunning { process.terminate() }
+      if done.wait(timeout: .now() + 2) != .success {
+        if process.isRunning { _ = kill(process.processIdentifier, SIGKILL) }
+        _ = done.wait(timeout: .now() + 2)
+      }
       throw fail("UPDATE_TIMEOUT", "Kontrollen tog för lång tid.")
     }
     try require(process.terminationStatus == 0, "Kontrollen av den nya versionen misslyckades.")
   }
-  static func stage(_ asset: UpdateAsset, store: Store) throws -> URL {
+  static func stage(_ offered: UpdateAsset, store: Store) throws -> URL {
+    let asset = try authenticated(offered)
     try require(!pending(store), "Återställ läsaren innan programmet uppdateras.")
     let target = Bundle.main.bundleURL.standardizedFileURL
     try require(
@@ -251,8 +314,9 @@ enum Updates {
       try verify(bytes, asset: asset)
       try validateZip(bytes)
       try bytes.write(to: directory.appendingPathComponent("package.zip"), options: .atomic)
+      try asset.signedFeed!.write(to: directory.appendingPathComponent("release.feed"), options: .atomic)
       let plan = UpdatePlan(
-        target: target.path, directory: directory.path, parent: getpid(), asset: asset)
+        target: target.path, directory: directory.path, parent: getpid(), channel: asset.channel!)
       let planURL = directory.appendingPathComponent("plan.json")
       try JSONEncoder().encode(plan).write(to: planURL, options: .atomic)
       let helper = directory.appendingPathComponent("installer")
@@ -264,7 +328,7 @@ enum Updates {
     }
   }
   static func install(_ planURL: URL) throws {
-    let plan: UpdatePlan = try Store.decode(planURL)
+    let plan = try JSONDecoder().decode(UpdatePlan.self, from: readRegular(planURL, maximum: 16384))
     let store = try Store()
     let fm = FileManager.default
     let directory = URL(fileURLWithPath: plan.directory)
@@ -272,6 +336,10 @@ enum Updates {
     try require(
       directory.standardizedFileURL.path
         == planURL.deletingLastPathComponent().standardizedFileURL.path
+        && directory.deletingLastPathComponent().standardizedFileURL.path == store.url("updates").standardizedFileURL.path
+        && directory.resolvingSymlinksInPath() == directory.standardizedFileURL
+        && target.resolvingSymlinksInPath() == target.standardizedFileURL
+        && ["stable", "preview"].contains(plan.channel) && plan.parent > 1
         && target.pathExtension == "app" && !target.path.hasPrefix("/Volumes/"),
       "Ogiltig uppdateringsplan.")
     let deadline = Date().addingTimeInterval(120)
@@ -289,12 +357,13 @@ enum Updates {
       flock(lock, LOCK_EX | LOCK_NB) == 0 && !pending(store),
       "Programmet används eller läsaren behöver återställas.")
     let archive = directory.appendingPathComponent("package.zip")
-    let bytes = try Data(contentsOf: archive)
-    try verify(bytes, asset: plan.asset)
+    let (asset, bytes) = try installPackage(directory, channel: plan.channel)
     try validateZip(bytes)
-    let extracted = directory.appendingPathComponent("extracted")
-    try fm.createDirectory(at: extracted, withIntermediateDirectories: false)
-    try run("/usr/bin/ditto", ["-x", "-k", archive.path, extracted.path])
+    let extracted = directory.appendingPathComponent("extracted-" + UUID().uuidString)
+    try fm.createDirectory(at: extracted, withIntermediateDirectories: false, attributes: [.posixPermissions: 0o700])
+    defer { try? fm.removeItem(at: extracted) }
+    // Feed the exact verified bytes to ditto. Never reopen a replaceable archive path.
+    try run("/usr/bin/ditto", ["-x", "-k", "-", extracted.path], input: bytes)
     let candidate = extracted.appendingPathComponent("Bricklasaren.app")
     guard let bundle = Bundle(url: candidate) else {
       throw fail("UPDATE_APP", "Programmet saknas i paketet.")
@@ -302,7 +371,7 @@ enum Updates {
     try require(
       bundle.bundleIdentifier == "se.tobtech.bricklasaren"
         && bundle.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String
-          == plan.asset.Version,
+          == asset.Version,
       "Fel programversion i paketet.")
     try run("/usr/bin/codesign", ["--verify", "--deep", "--strict", candidate.path])
     try run(candidate.appendingPathComponent("Contents/MacOS/Bricklasaren").path, ["--self-test"])

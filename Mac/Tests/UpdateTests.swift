@@ -1,4 +1,5 @@
 import Foundation
+import Darwin
 
 extension SelfTests {
   static func updates(_ store: Store) throws {
@@ -8,6 +9,59 @@ extension SelfTests {
     )!
     let asset = try Updates.decode(fixture, channel: "preview")!
     try check(asset.Version == "99.1.0", "Signed feed is accepted")
+    _ = try Updates.authenticated(asset)
+    var unsigned = asset
+    unsigned.signedFeed = nil
+    try rejects("Unsigned local asset cannot authorize staging") { _ = try Updates.authenticated(unsigned) }
+    let substituted = UpdateAsset(Version: "99.2.0", Url: asset.Url, Sha256: asset.Sha256,
+      Size: asset.Size, Notes: nil, signedFeed: fixture, channel: "preview")
+    try rejects("Mutable metadata cannot replace signed fields") { _ = try Updates.authenticated(substituted) }
+    let installDirectory = store.url("update-auth-tests")
+    try FileManager.default.createDirectory(at: installDirectory, withIntermediateDirectories: false)
+    let envelopeURL = installDirectory.appendingPathComponent("release.feed")
+    let archiveURL = installDirectory.appendingPathComponent("package.zip")
+    try fixture.write(to: envelopeURL)
+    try Data("fixture".utf8).write(to: archiveURL)
+    let (installedAsset, installedBytes) = try Updates.installPackage(installDirectory, channel: "preview")
+    try check(installedAsset.Version == asset.Version && installedBytes == Data("fixture".utf8),
+      "Final installer authenticates original envelope and exact bytes")
+    try rejects("Final installer rejects substituted channel") {
+      _ = try Updates.installPackage(installDirectory, channel: "stable")
+    }
+    try Data("changed".utf8).write(to: archiveURL)
+    try rejects("Final installer rejects replaced archive") {
+      _ = try Updates.installPackage(installDirectory, channel: "preview")
+    }
+    try Data("fixture".utf8).write(to: archiveURL)
+    var alteredEnvelope = fixture
+    alteredEnvelope[40] ^= 1
+    try alteredEnvelope.write(to: envelopeURL)
+    try rejects("Final installer rejects replaced signed envelope") {
+      _ = try Updates.installPackage(installDirectory, channel: "preview")
+    }
+    try fixture.write(to: envelopeURL)
+    let linked = installDirectory.appendingPathComponent("linked.zip")
+    try FileManager.default.createSymbolicLink(at: linked, withDestinationURL: archiveURL)
+    try rejects("Installer refuses symlinked update inputs") { _ = try Updates.readRegular(linked, maximum: 100) }
+    try Data(repeating: 65, count: 65537).write(to: envelopeURL)
+    try rejects("Installer bounds envelope reads") {
+      _ = try Updates.installPackage(installDirectory, channel: "preview")
+    }
+    let zipBytes = Data(base64Encoded: "UEsDBBQAAAAIAIC8Y10Kp1u2EQAAAA8AAAAaAAAAQnJpY2tsYXNhcmVuLmFwcC9wcm9iZS50eHQrSy3KTMtMTdHNTc3NL6oEAFBLAQIUAxQAAAAIAIC8Y10Kp1u2EQAAAA8AAAAaAAAAAAAAAAAAAACAAQAAAABCcmlja2xhc2FyZW4uYXBwL3Byb2JlLnR4dFBLBQYAAAAAAQABAEgAAABJAAAAAAA=")!
+    try Updates.validateZip(zipBytes)
+    let extracted = installDirectory.appendingPathComponent("from-memory")
+    try FileManager.default.createDirectory(at: extracted, withIntermediateDirectories: false)
+    try Updates.run("/usr/bin/ditto", ["-x", "-k", "-", extracted.path], input: zipBytes)
+    try check(try String(contentsOf: extracted.appendingPathComponent("Bricklasaren.app/probe.txt"))
+      == "verified-memory", "Installer extracts verified memory snapshot through stdin")
+    let childPID = installDirectory.appendingPathComponent("timed-out-child.pid")
+    try rejects("Installer terminates a child that ignores graceful cancellation") {
+      try Updates.run("/bin/sh", ["-c", "trap '' TERM; echo $$ > \"$1\"; while :; do :; done",
+        "installer-timeout-test", childPID.path], timeout: 1)
+    }
+    let stoppedPID = Int32(try String(contentsOf: childPID).trimmingCharacters(in: .whitespacesAndNewlines))!
+    try check(kill(stoppedPID, 0) != 0, "Timed-out installer child cannot outlive cleanup")
+    try FileManager.default.removeItem(at: installDirectory)
     try rejects("Channel cannot be substituted") {
       _ = try Updates.decode(fixture, channel: "stable")
     }
