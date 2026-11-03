@@ -1,0 +1,46 @@
+name: macOS self-tests
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  macos:
+    runs-on: macos-15
+    timeout-minutes: 15
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Verify repository checksums
+        run: shasum -a 256 -c SHA256SUMS.txt
+
+      - name: Build Apple Silicon app and DMG
+        run: Mac/build.sh
+
+      - name: Verify updater archive
+        run: dist/Bricklasaren.app/Contents/MacOS/Bricklasaren --verify-update-archive dist/Bricklasaren-3.5.0-macOS-AppleSilicon.zip
+
+      - name: Run offline application tests
+        run: dist/Bricklasaren.app/Contents/MacOS/Bricklasaren --self-test
+
+      - name: Render interface with synthetic data
+        run: dist/Bricklasaren.app/Contents/MacOS/Bricklasaren --render-tests "$RUNNER_TEMP/bricklasare-mac-ui"
+
+      - name: Save Mac application and interface
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: macOS-AppleSilicon
+          path: |
+            dist/Bricklasaren-3.5.0-macOS-AppleSilicon.dmg
+            dist/Bricklasaren-3.5.0-macOS-AppleSilicon.zip
+            ${{ runner.temp }}/bricklasare-mac-ui
+          if-no-files-found: error
+          retention-days: 14

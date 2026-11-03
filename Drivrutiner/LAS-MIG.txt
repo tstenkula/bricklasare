@@ -1,0 +1,14 @@
+Brickläsaren · USB-drivrutin för Windows
+
+Hämta HID OMNIKEY USB CDC EEM Driver från tillverkaren:
+https://www.hidglobal.com/drivers/34881
+
+Kontrollera systemkraven och läs tillverkarens villkor på sidan. Installationen
+kan kräva administratörens hjälp. Packa upp det officiella paketet och följ
+anvisningarna där. Starta sedan Brickläsaren och välj Försök ansluta.
+
+Drivrutinen är separat från CCID/smartkortsdrivrutinen. Om anslutningen redan
+fungerar behöver du inte installera något. Mac använder inbyggt smartkortsstöd.
+
+Brickläsaren distribuerar inte tillverkarens drivrutinsfiler och ändrar inga
+säkerhetsinställningar. Knappen i uppstartsguiden öppnar endast denna webbsida.

@@ -1,0 +1,146 @@
+BRICKLÄSAREN – 3.5.0 / IT
+2026-11-03
+
+LEVERANS
+PowerShell-version med valbar accentfärg och lokal logotyp. Standardfärg: marinblå #003B55.
+Tobtech-projekt. Neutral standardprofil.
+Läsarprotokoll, kommandon och återställning bygger på v3.1.
+Git-versionen läser referensbrickans facit från en lokal fil; riktiga
+referensvärden har ersatts med syntetiska värden i självtesterna.
+Ingen egen EXE, installerad tjänst, CSV-export, persondatabas eller
+R-CARD-integration skapas. Drivrutinen länkas till tillverkarens officiella sida.
+
+START OCH KRAV
+Starta-Bricklasaren.cmd använder installerad Windows PowerShell 5.1,
+STA och Add-Type för att köra läsbar C#-kod i PowerShell-processen.
+.NET Framework/Windows Forms krävs, precis som i fungerande v3.1.
+PowerShell 7 används inte. Ingen exekveringspolicy ändras.
+Det minimerade startfönstret hör till programmet; stäng via huvudfönstret.
+
+DRIVRUTIN
+EEM behövs för kommunikationen med läsaren över USB-nätverket.
+Startguidens Hämta USB-drivrutin öppnar https://www.hidglobal.com/drivers/34881
+Läs krav och villkor där. IT eller administratör kan behövas för installationen.
+Inga drivrutinsfiler eller separata installationsskript medföljer.
+Efter installation: välj Försök ansluta i programmet.
+
+FÖRSTA STARTEN OCH SPARAT PASSERSYSTEM
+Om inget giltigt lokalt profilval finns öppnas Välj passersystem.
+Inget passersystem är förvalt. Läsning är låst tills valet har sparats.
+RCO – MIFARE + EM, RCO kort/lång ID, Axema VAKA och Bewator 2010/Omnis stöds. RCO har MIFARE/EM-val.
+Spara och börja skriver Mode och RcoChip tillsammans till formatval.json.
+Skrivningen är atomisk: ett misslyckat sparande ändrar inte aktivt val.
+Vid senare starter läses samma fil och dialogen hoppas över.
+Hjälp > Inställningar öppnar samma val; ändringar sparas direkt.
+Saknad eller ogiltig konfiguration leder till ett nytt val, inte ett förvalt läge.
+En medföljande formatval.json används inte för att kringgå förstagångsvalet.
+Valet gäller per Windows-användare, även om programmappen flyttas/byts.
+
+AUTOMATISKT SKYDD MOT TANGENTBORDSINMATNING
+Varje anslutning identifierar läsaren, kontrollerar firmware och läser
+Custom Report-inställningen. Skyddet är obligatoriskt för avläsning.
+När det redan är aktivt behöver USB-läget inte ändras eller tillämpas igen.
+Annars sparas originalvärdet och en återställningsbar övergångsjournal
+FÖRE ändring. Custom Report aktiveras, Apply Changes utförs och läsaren
+startas om. Samma läsare, firmware och valt USB-läge verifieras efteråt.
+Läsning och kopiering aktiveras först när förberedelsen är bekräftad.
+Vid fel får användaren återförsöka via Hjälp; skyddet hoppas aldrig över.
+En avbruten lägesändring återupptas vid nästa anslutning.
+
+Custom Report stoppar vanliga tangenttryckningar; det är inte RF-avstängning.
+Radiofält och intern kortpollning kan vara aktiva mellan läsningarna.
+Programmet begär/presenterar kort-ID endast vid användarstartad avläsning.
+Skyddet behålls efter skanning och när programmet stängs, så läsaren
+inte börjar skriva i andra program igen. Detta är en inställning i läsaren.
+Första förberedelsen kan ta längre tid eftersom USB-enheten startar om.
+
+Hjälp > IT-inställningar > Återställ tidigare USB-läge och avsluta
+återställer den sparade originalinställningen och stänger programmet.
+Nästa start aktiverar skyddet igen. Återställning med fel läsaridentitet,
+ändrad firmware eller ogiltig backup avvisas.
+
+LÄSNING OCH PROFIL
+Befintlig verifierad byteordning återanvänds på samma Windows-konto.
+En medföljande lasarprofil.json importeras bara för exakt samma läsar-ID
+och firmware, och endast när ingen skanningsåterställning kvarstår.
+En ny läsare använder inbyggt standardformat utan referensprov.
+En ogiltig befintlig profil stoppar däremot läsning tills IT rättat den.
+OMNIKEY 5427 CK (06) och Gen2 (0A) godtas efter samma protokollkontroller.
+Se IT/Forsta-start.md för nummerformat och begränsningar. Referenskontrollen
+använder en lokalt konfigurerad kombibricka enligt IT/Referensbricka.md.
+Den lokala filen referensbricka.json behöver oberoende verifierade UID-värden
+och ingår inte i Git. Befintliga profiler används utan en ny referensfil
+vid vanlig läsning. Detta ingår inte i receptionens dagliga arbetsflöde.
+
+RCO – MIFARE + EM läser MIFARE och EM i två steg med brickborttagning emellan.
+Användaren måste använda samma fysiska bricka; programmet kan inte
+bevisa att två chip hör till samma plastbricka.
+RCO läser vald teknik och visar 9/10 siffror. Axema/Bewator-lägena läser EM.
+Axema VAKA 14 siffror är inte Axbase; Bewator 2010/Omnis 13 siffror är
+inte Bewator Entro 8 siffror. Kontrollera rätt systemvariant vid val.
+Tidigare resultat rensas vid ny skanning. Avbrytning ger inga delresultat.
+Resultat blir kopieringsbara först efter avslutad läsning och återställning.
+
+ÅTERSTÄLLNING OCH MINNE
+OmnikeyCore:s befintliga teknikväxling/återställning använder Apply Changes
+som skriver till flash. Den delen har inte skrivits om. Skyddets eget
+USB-läge växlas däremot inte för varje skanning eller ordinarie programstart.
+Skanningsbackupen innehåller pollinställningar och EM-dataurval, inte
+Custom Report. Skyddet kontrolleras före och efter lyckad läsning.
+Vid avbruten skanning: låt läsaren vara inkopplad och använd återställning
+under Hjälp. Radera inte väntande återställningsfiler.
+
+KONFIGURATION OCH UPPGRADERING
+Datamapp: %LOCALAPPDATA%/Tobtech/Omnikey-RCO-v2
+Samma sökväg behålls för kompatibilitet med fungerande läsarprofil.
+- formatval.json: valt Mode och RcoChip, läses vid varje start.
+- reception.json: lokal läsaradress.
+- referensbricka.json: IT:s lokala facit för en fysisk kombibricka; aldrig i Git.
+- byteordning-<ID>.json: verifierad byteordning per läsare/firmware.
+- aterstall-<ID>.json: ofullständig skanningsåterställning.
+- backup-*.json: de 20 senaste säkerhetskopiorna efter verifierad återställning.
+  Ingen gallring görs medan någon aterstall-*.json finns kvar.
+- utseende.json och branding/: personlig accentfärg, texter och kopierad logotyp.
+- usb-original-<ID>.json: USB-läget före automatisk förberedelse.
+- usb-pending-<ID>.json: ej avslutad USB-lägesändring.
+- usb-mode-<ID>.lock: låsfil; ett kvarvarande tomt filnamn är normalt.
+- sjalvtest-reception.txt och felrapporter: teknisk status utan skannade ID.
+
+Packa upp 3.5.0 i en egen mapp och starta dess CMD-fil. Byt en eventuell
+genväg först när den ska peka på 3.3. Kör bara en version mot läsaren åt
+gången. v3.1 ändras inte, men läsarens Custom Report-läge är beständigt.
+Skapa receptionspaket under Hjälp exporterar programmet
+och en verifierad läsarprofil om en sådan finns. Skanningsdata, felloggar och lokala
+återställningsjournaler exporteras inte. Nya användare får välja passersystem.
+
+SEKRETESS OCH SUPPORT
+Ingen historik eller skannade kortnummer skrivs till fil. Resultaten
+finns i fönstret och kopieras till Windows urklipp på användarens begäran.
+Programmet kan inte styra Windows urklippshistorik eller inklistrade kopior.
+Protokollloggen i arbetsminnet sparar endast transportlängder, inte råa kortsvar.
+Den rensas med resultaten och är begränsad till 2 500 rader.
+Felloggar innehåller undantagstyp, HRESULT och eventuell läsar-/nätstatus,
+inte undantagsmeddelanden eller råa kortsvar. Ingen global tangentbordshook.
+IT/Starta-med-felsokning.cmd visar startfel. IT/Kor-sjalvtester.cmd kör
+kodkontroller utan att ansluta till läsaren. Se IT/Verifiering.txt för
+kontroller som gjorts och kvarvarande plattforms-/hårdvarubegränsningar.
+
+UTSEENDE
+Hjälp > IT-inställningar > Utseende – färg och logotyp. Se IT/Utseende.md.
+Inställningarna gäller Windows-kontot och följer inte med exporterade paket.
+
+KÄLLOR
+HID OMNIKEY USB CDC EEM Driver 3.15:
+https://www.hidglobal.com/drivers/34881
+HID Custom Report/EEM-guiden 5127-902 E.5:
+https://www.hidglobal.com/sites/default/files/documentlibrary/2026/06/5127-902-e.5-omnikey-5x27ck-keyboard-wedge-user-guide-en.pdf
+Microsoft PnPUtil:
+https://learn.microsoft.com/windows-hardware/drivers/devtest/pnputil-command-syntax
+
+ARBETSFLODE OCH UPPDATERINGAR
+Under Hjälp > IT-inställningar kan automatisk kopiering, ljudsignaler,
+uppdateringskanal och automatisk versionskontroll väljas. Uppdateringen
+kräver uttryckligt installationsval och bevarar lokala inställningar.
+Se Updates/README.md i källkoden. Repot är fortfarande privat.
+Gratis privat bruk; kommersiellt och organisatoriskt bruk kräver separat
+betald Tobtech-licens. Se LICENSE.txt.

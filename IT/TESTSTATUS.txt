@@ -1,0 +1,13 @@
+BRICKLÄSAREN 3.5.0 – TESTSTATUS
+
+Aktuella körningar och byggresultat:
+https://github.com/tstenkula/bricklasare/actions
+
+Windows kontrolleras med Windows PowerShell 5.1 på Windows Server 2022.
+Mac byggs för Apple Silicon/macOS 13+ och kontrolleras på macOS 15.
+Inbyggda tester omfattar simulerad läsning, återställning, privata
+inställningar, signerade uppdateringar och upprepad fönsterhantering.
+Alla testnummer är syntetiska. Ingen fysisk läsare eller drivrutin används.
+
+Kör IT/Kor-sjalvtester.cmd för Windows-tester. Se Mac/VERIFIERING.md
+för Mac och IT/Verifiering.txt för kvarvarande hårdvaruprov.

@@ -1,0 +1,71 @@
+# Windows user configuration, reader profiles and recovery journals
+*.json
+*.json.*
+*.lock
+*.tmp
+*.bak
+*.local.*
+Tobtech/
+Omnikey-RCO-v2/
+.local/
+
+# Scanned/exported card data and diagnostics
+*.csv
+*.tsv
+*.log
+*.log.*
+[Ll]ogs/
+[Dd]iagnostics/
+sjalvtest-*.txt
+startfel-*.txt
+senaste-fel*.txt
+*felrapport*.txt
+*diagnostik*.txt
+
+# Secrets and private keys
+.env
+.env.*
+secrets.*
+*.pem
+*.key
+*.pfx
+*.p12
+
+# Generated packages and build output
+*.zip
+*.7z
+*.tar
+*.gz
+bin/
+obj/
+dist/
+*.exe
+*.dll
+*.pdb
+
+# OS and editor files
+.DS_Store
+Thumbs.db
+desktop.ini
+.idea/
+.vscode/
+*.user
+*.suo
+
+# Personal branding and temporary UI render output
+branding/
+ui-test-images/
+
+# Native macOS build products
+*.dmg
+*.app/
+*.o
+*.dSYM/
+*.swiftmodule
+*.swiftdoc
+*.swiftsourceinfo
+.build/
+
+# Python release tooling
+__pycache__/
+*.pyc

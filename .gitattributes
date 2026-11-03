@@ -1,0 +1,4 @@
+# Preserve package bytes, BOMs and package hashes across operating systems.
+* -text
+*.md text eol=lf
+*.yml text eol=lf

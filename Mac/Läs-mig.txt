@@ -1,0 +1,32 @@
+Brickläsaren 3.5.0 för Mac · Apple Silicon
+
+Kräver macOS 13 eller senare och en OMNIKEY 5427 CK eller 5427 CK Gen2.
+Intel-Mac stöds inte.
+
+1. Dra Bricklasaren.app till Program.
+2. Anslut läsaren utan någon bricka på den. Godkänn USB-tillbehöret om macOS frågar.
+3. Öppna Brickläsaren och välj passersystem vid första starten.
+4. Vänta tills läsaren är klar. Klicka på Läs bricka och följ instruktionerna.
+
+I läget RCO – MIFARE + EM används samma bricka i båda stegen.
+Numren visas först efter att läsningen och återställningen är färdiga.
+Ingen registrering av enskilda brickor eller referensbricka krävs för vanlig läsning.
+
+Programmet förbereder smartkortsläget så att läsaren inte skriver till andra fönster.
+Låt USB-kabeln sitta i under förberedelse och läsning. Vid avbrott finns återställning
+under Hjälp → IT-inställningar. Där finns även färg, logotyp och frivilligt referensprov.
+
+Lokala inställningar:
+~/Library/Application Support/Tobtech/Bricklasaren/
+Inga skannade kortnummer sparas i historik eller felrapporter. Referensuppgifter som
+IT uttryckligen matar in sparas lokalt. Ingen telemetri. Versionskontroll kan ske vid start; installation kräver ditt val.
+
+Den här versionen har en lokal ad-hoc-signatur, ingen Apple Developer ID-signatur
+eller notariering. Om macOS blockerar första starten: försök öppna appen och använd
+sedan Systeminställningar → Integritet och säkerhet → Öppna ändå, om alternativet
+finns. Ändra inte datorns globala säkerhetsinställningar.
+
+Programmet är verifierat med simulerad läsare. Fysisk läsning, USB-växling och
+kortkompatibilitet behöver också provas med den verkliga läsaren på Mac.
+
+Support och källkod: https://github.com/tstenkula/bricklasare

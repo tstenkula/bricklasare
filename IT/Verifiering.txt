@@ -1,0 +1,23 @@
+BRICKLÄSAREN 3.5.0 – VERIFIERING
+
+Tobtech-projekt med neutral standardprofil. Aktuell teststatus redovisas
+av GitHub Actions för Windows och macOS. Äldre leveransloggar och byggen
+ska inte användas för att beskriva denna version.
+
+Tester körs utan fysisk läsare och med syntetiska nummer. De omfattar
+nummerformat, protokoll, identitetskontroller, avbrott/återställning,
+första uppstart, inställningar, dataminimering och upprepad fönsterhantering.
+Uppdateringstester kontrollerar signatur, kanal, version, paketets hash,
+ZIP-sökvägar och spärr vid väntande återställning. Mac provar också
+misslyckat mappbyte och bevarande av tidigare version och lokala filer.
+
+Windows: IT/Kor-sjalvtester.cmd, PowerShell 5.1, Windows Forms.
+Mac: Bricklasaren.app/Contents/MacOS/Bricklasaren --self-test.
+
+Hårdvaruprov återstår: fabriksny och tidigare använd OMNIKEY 5427 CK/Gen2,
+drivrutin/tillbehörsgodkännande, läsning med verkliga taggar, urkoppling
+under läsning, vila/återanslutning och längre drift. Att resurstesterna
+passerar är inte ett bevis på att alla tänkbara minnesläckor är uteslutna.
+
+Uppdateringskällan blir tillgänglig för vanliga användare först när repot
+senare görs publikt. Ingen OS-kodsignering eller notariering har införts.

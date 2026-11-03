@@ -1,0 +1,32 @@
+﻿BRICKLÄSAREN – 3.5.0
+
+1. Packa upp hela zip-filen i en egen mapp.
+2. Starta Starta-Bricklasaren.cmd.
+3. Välj passersystem första gången och klicka Spara och börja.
+4. Klicka Läs bricka och följ anvisningarna i fönstret.
+
+Valet sparas direkt för ditt Windows-konto och används vid nästa start.
+Ändra det under Hjälp > Inställningar – Välj passersystem.
+Programmet förbereder läsaren automatiskt så att bricknummer inte
+skrivs i andra Windows-fönster. Låt USB-kabeln sitta kvar under förberedelsen.
+
+FÖR IT
+Programmet körs via Windows PowerShell 5.1 utan egen EXE-fil.
+På en dator där läsaren redan fungerar behöver drivrutinen inte installeras igen.
+Om anslutningen saknas visas en startguide. Välj Hämta USB-drivrutin
+för att öppna tillverkarens sida. Installera enligt deras anvisningar och
+välj sedan Försök ansluta. Drivrutinen ingår inte; IT kan behöva hjälpa till.
+
+Läsarprofilen från fungerande v3.1 återanvänds på samma Windows-konto.
+Finns lasarprofil.json i den tidigare programmappen, kopiera den bredvid
+Starta-Bricklasaren.cmd. För annan dator/användare: skapa ett receptionspaket
+med den verifierade profilen under Hjälp > IT-inställningar.
+
+Ingen CSV-export och ingen skanningshistorik. Inställningar sparas.
+Mer information: Snabbstart.txt och IT/LAS-MIG.txt.
+
+Färg, logotyp och organisationsnamn ändras under Hjälp > IT-inställningar > Utseende.
+Nya läsare använder standardformat utan referensbricka. Befintliga profiler återanvänds.
+
+Arbetsflöde och uppdateringar finns under Hjälp > IT-inställningar.
+Gratis privat bruk. Kommersiellt bruk kräver betald Tobtech-licens; se LICENSE.txt.

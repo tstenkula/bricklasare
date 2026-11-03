@@ -1,0 +1,62 @@
+TOBTECH BRICKLASAREN LICENSE 1.0
+Copyright (c) 2026 Tobtech. All rights reserved.
+
+1. Scope and ownership
+This license covers the Bricklasaren application, its original source code,
+documentation and original artwork provided by Tobtech (the Software).
+Third-party products and trademarks retain their respective owners and terms.
+This is a proprietary, source-available license, not an open-source license.
+
+2. Free personal use
+An individual may download, install and run unmodified official releases for
+strictly personal, private, non-commercial purposes without charge. Copies
+necessary for installation, execution and personal backup are permitted.
+Use at work, for an employer or client, in a business, or to provide a paid
+service is not personal use, even if the individual is not directly paid for
+using the Software. Organizational use requires the agreement in section 3.
+
+3. Commercial and organizational use
+Commercial, professional and organizational use requires a separate written
+commercial license from Tobtech and payment of the agreed license fee before
+such use. This document does not set a price or automatically grant a trial,
+commercial license, or an obligation on Tobtech to sell a license. Existing
+separate written agreements with Tobtech control where they expressly differ.
+Request commercial terms through the project maintainer at
+https://github.com/tstenkula/bricklasare/issues (do not post confidential details).
+
+4. Source inspection and contributions
+You may read the published source, inspect its behavior, and submit issues,
+suggestions and proposed fixes to the official project. You may make a local
+copy and run a locally modified copy solely to investigate and propose a fix
+to this project, not for production commercial use or as another product.
+By voluntarily submitting a contribution that you have the right to provide,
+you grant Tobtech a worldwide, non-exclusive, irrevocable, royalty-free right
+to use, reproduce, modify, distribute and sublicense that contribution as part
+of this project, including commercially. You retain your own copyright.
+You must identify any third-party terms applicable to your contribution.
+
+5. Restrictions
+Except for the limited permissions above, a separate written agreement, rights
+required by the hosting platform's applicable terms, or rights that mandatory
+law does not allow to be restricted, you may not redistribute, republish, sell,
+sublicense, rebrand, or incorporate the Software or substantial portions of
+its code into another product. You may not distribute modified versions or
+use a repository fork as a competing or rebranded distribution. Keep copyright
+and license notices intact. Linking to official downloads is encouraged.
+Platform-required rights to view or fork a public repository do not grant a
+commercial-use license or general redistribution rights under this license.
+
+6. Updates and termination
+Official updates are subject to the license supplied with that release unless
+a separate agreement applies. No ongoing update or support service is promised
+by this license. Material breach terminates the permissions granted here; stop
+unauthorized use and remove unauthorized copies. This does not terminate rights
+that applicable mandatory law preserves or separate agreements expressly grant.
+
+7. Warranty and liability
+To the extent permitted by applicable law, the Software is supplied AS IS,
+without warranties of merchantability, fitness for a particular purpose or
+non-infringement. Tobtech is not liable for indirect or consequential loss,
+lost data, profits, or business interruption arising from the Software. These
+limitations do not exclude liability or consumer rights that cannot lawfully
+be excluded. Verify read results and suitability for the intended access system.
