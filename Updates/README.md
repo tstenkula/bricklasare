@@ -24,7 +24,7 @@ Detta är **paketverifiering**, inte Windows Authenticode eller Apple Developer 
 2. Signera kanalfilen lokalt med `tools/release.py`. Exempel:
 
    ```sh
-   python3 tools/release.py --key /secure/path/update-signing.pem --channel preview --version 3.5.0 --tag v3.5.0-preview.1 --windows dist/Bricklasaren-3.5.0-Windows.zip --mac dist/Bricklasaren-3.5.0-macOS-AppleSilicon.zip --output Updates/preview.feed
+   python3 tools/release.py --key /secure/path/update-signing.pem --channel preview --version 3.5.1 --tag v3.5.1-preview.1 --windows dist/Bricklasaren-3.5.1-Windows.zip --mac dist/Bricklasaren-3.5.1-macOS-AppleSilicon.zip --output Updates/preview.feed
    ```
 
 3. Kontrollera att arkivens hash stämmer mot GitHub, uppdatera källfilernas kontrollsummor och skicka kanalfilen genom granskning till `main`. Flytta inte en befintlig release till annat innehåll efter publicering.

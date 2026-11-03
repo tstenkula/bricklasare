@@ -76,11 +76,11 @@ final class UpdateDownload: NSObject, URLSessionDataDelegate {
   }
 }
 enum Updates {
-  static let current = "3.5.0"
+  static let current = "3.5.1"
   static let publicKey =
     "MIIBigKCAYEAn8JTA0cbbRrraGNb11fX4Dyanoa8S9TzTBGl8Edfagx743HROUj9lDCwJvuVF6cNpH4mB2dN33O+XfYKZMrUaJ0K/3Q9gmPLqedlvbpuHWlEaeUzekdT4Npo7EZpwo+Cwcxjlmlahgoll1MkjEu8QERzAQEeuTB4vZCsKdXdYcRlKAQuPEKqCWkiH49prMDvVdqUUYLl2TPLcHPD8MDdkbFh/glWJDTRB1No++PCUU8PVG80X94BnMe1E/+LLyTjxaNYVSsIFZlD9XX3eup7t/UTKUk9RC1u8WY23l74ccXwy71lirntfOFW6MdK4kFsIGOk+2PF/QGwoIcpwfhSt7+Id0y85VGEqe002CngsfxUQ7BkAAAB2+D4vPcU3FBLkleYkG5B+WXasbCslTGFXG+hnFpTU2R5XQECRJ2UXjuJN/lDaw8AE7dwUTTfibfYGs9mAUZ6nECBsL3OmpXtCK9ZyTHx2AWs+hvXP+7hzcluf12K2H4MveyyNcOFSNedAgMBAAE="
   static let unavailable =
-    "Uppdateringskällan är inte tillgänglig. Repot kan fortfarande vara privat, eller internetanslutningen saknas. Programmet fungerar som vanligt."
+    "Det gick inte att söka efter uppdateringar. Kontrollera internetanslutningen och försök igen senare. Du kan fortsätta använda Brickläsaren."
   static func version(_ text: String) throws -> [Int] {
     let parts = text.split(separator: ".", omittingEmptySubsequences: false)
     try require(
@@ -121,7 +121,8 @@ enum Updates {
       SecKeyVerifySignature(
         key, .rsaSignatureMessagePKCS1v15SHA256, payload as CFData, signature as CFData, nil)
     else {
-      throw fail("UPDATE_SIGNATURE", "Uppdateringens signatur stämmer inte. Ingen fil installeras.")
+      throw fail(
+        "UPDATE_SIGNATURE", "Det gick inte att kontrollera uppdateringen. Försök igen senare.")
     }
     let feed = try JSONDecoder().decode(UpdateFeed.self, from: payload)
     try require(
@@ -149,7 +150,7 @@ enum Updates {
     let hash = SHA256.hash(data: bytes).map { String(format: "%02x", $0) }.joined()
     try require(
       bytes.count == asset.Size && hash == asset.Sha256.lowercased(),
-      "Paketets kontrollsumma stämmer inte.")
+      "Den hämtade uppdateringen kunde inte kontrolleras. Försök hämta den igen.")
   }
   // Validate central AND local names before ditto sees the archive. Reject links,
   // traversal, duplicate names, encryption, ZIP64 and excessive expanded sizes.
@@ -386,7 +387,7 @@ extension AppController {
     alert.messageText = "Uppdatera till \(asset.Version)?"
     alert.informativeText =
       (asset.Notes ?? "")
-      + "\n\nProgrammet stängs och startas om. Lokala inställningar bevaras. Gratis privat bruk; kommersiellt bruk kräver betald licens."
+      + "\n\nAppen startas om när uppdateringen är klar. Dina inställningar sparas."
     alert.addButton(withTitle: "Hämta och installera")
     alert.addButton(withTitle: "Senare")
     guard alert.runModal() == .alertFirstButtonReturn else { return }

@@ -47,7 +47,7 @@ extension AppController {
     channel.addItems(withTitles: ["Stabil", "Förhandsversioner"])
     channel.selectItem(at: workflow.channel == "preview" ? 1 : 0)
     let auto = NSButton(
-      checkboxWithTitle: "Sök vid start (hämtar eller installerar inte programmet)", target: nil,
+      checkboxWithTitle: "Sök efter nya versioner när appen startar", target: nil,
       action: nil)
     auto.state = workflow.autoCheck ? .on : .off
     let root = stack(
@@ -55,9 +55,9 @@ extension AppController {
         label("Arbetsflöde", size: 24, bold: true),
         label("Kopiera automatiskt efter en helt avslutad läsning"), copy, sounds,
         label("⌘R: Läs • Esc: Avbryt • ⌘1 / 2 / 3: Kopiera", size: 12),
-        label("Uppdateringar från GitHub", size: 20, bold: true), channel, auto,
+        label("Uppdateringar", size: 20, bold: true), channel, auto,
         label(
-          "En uppdatering installeras först när du väljer det. Gratis privat bruk; kommersiellt bruk kräver betald Tobtech-licens. Se licensen i programmets resurser.",
+          "Du väljer själv när en uppdatering ska installeras.",
           size: 12),
       ], spacing: 16)
     root.addArrangedSubview(
@@ -138,7 +138,11 @@ extension AppController {
       connect()
       return
     }
-    readerAction("Kontrollerar kontakt, identitet, profil och USB-skydd", success: "Kontroller godkända. Läs en bricka för att kontrollera resultatet i passersystemet. Spara felrapporten via Hjälp om problemet återkommer.") { reader in
+    readerAction(
+      "Kontrollerar kontakt, identitet, profil och USB-skydd",
+      success:
+        "Kontroller godkända. Läs en bricka för att kontrollera resultatet i passersystemet. Spara felrapporten via Hjälp om problemet återkommer."
+    ) { reader in
       try reader.checkIdentity()
       try reader.verifyProtection()
       try require(

@@ -28,9 +28,9 @@
     }
     internal static class Updates
     {
-        internal const string Current = "3.5.0";
+        internal const string Current = "3.5.1";
         internal const string PublicKey = "<RSAKeyValue><Modulus>n8JTA0cbbRrraGNb11fX4Dyanoa8S9TzTBGl8Edfagx743HROUj9lDCwJvuVF6cNpH4mB2dN33O+XfYKZMrUaJ0K/3Q9gmPLqedlvbpuHWlEaeUzekdT4Npo7EZpwo+Cwcxjlmlahgoll1MkjEu8QERzAQEeuTB4vZCsKdXdYcRlKAQuPEKqCWkiH49prMDvVdqUUYLl2TPLcHPD8MDdkbFh/glWJDTRB1No++PCUU8PVG80X94BnMe1E/+LLyTjxaNYVSsIFZlD9XX3eup7t/UTKUk9RC1u8WY23l74ccXwy71lirntfOFW6MdK4kFsIGOk+2PF/QGwoIcpwfhSt7+Id0y85VGEqe002CngsfxUQ7BkAAAB2+D4vPcU3FBLkleYkG5B+WXasbCslTGFXG+hnFpTU2R5XQECRJ2UXjuJN/lDaw8AE7dwUTTfibfYGs9mAUZ6nECBsL3OmpXtCK9ZyTHx2AWs+hvXP+7hzcluf12K2H4MveyyNcOFSNed</Modulus><Exponent>AQAB</Exponent></RSAKeyValue>";
-        internal const string Unavailable = "Uppdateringskällan är inte tillgänglig. Repot kan fortfarande vara privat, eller internetanslutningen saknas. Programmet fungerar som vanligt.";
+        internal const string Unavailable = "Det gick inte att söka efter uppdateringar. Kontrollera internetanslutningen och försök igen senare. Du kan fortsätta använda Brickläsaren.";
         internal static Version ParseVersion(string value)
         {
             if (value == null || !Regex.IsMatch(value, @"\A[0-9]{1,5}\.[0-9]{1,5}\.[0-9]{1,5}\z")) throw new InvalidDataException("Ogiltigt versionsnummer.");
@@ -46,7 +46,7 @@
             byte[] payload = Convert.FromBase64String(lines[1]), signature = Convert.FromBase64String(lines[2]);
             using (RSACryptoServiceProvider rsa = new RSACryptoServiceProvider()) {
                 rsa.PersistKeyInCsp = false; rsa.FromXmlString(PublicKey);
-                if (!rsa.VerifyData(payload, CryptoConfig.MapNameToOID("SHA256"), signature)) throw new InvalidDataException("Uppdateringens signatur stämmer inte. Ingen fil installeras.");
+                if (!rsa.VerifyData(payload, CryptoConfig.MapNameToOID("SHA256"), signature)) throw new InvalidDataException("Det gick inte att kontrollera uppdateringen. Försök igen senare.");
             }
             UpdateFeed feed = new JavaScriptSerializer { MaxJsonLength = 65536 }.Deserialize<UpdateFeed>(Encoding.UTF8.GetString(payload));
             if (feed == null || feed.Schema != 1 || feed.Channel != channel) throw new InvalidDataException();
@@ -90,7 +90,7 @@
         internal static void VerifyPackage(byte[] bytes, UpdateAsset asset)
         {
             ValidateAsset(asset);
-            using (SHA256 sha = SHA256.Create()) if (bytes.LongLength != asset.Size || !String.Equals(BitConverter.ToString(sha.ComputeHash(bytes)).Replace("-", ""), asset.Sha256, StringComparison.OrdinalIgnoreCase)) throw new InvalidDataException("Paketets kontrollsumma stämmer inte.");
+            using (SHA256 sha = SHA256.Create()) if (bytes.LongLength != asset.Size || !String.Equals(BitConverter.ToString(sha.ComputeHash(bytes)).Replace("-", ""), asset.Sha256, StringComparison.OrdinalIgnoreCase)) throw new InvalidDataException("Den hämtade uppdateringen kunde inte kontrolleras. Försök hämta den igen.");
         }
         internal static void Extract(byte[] bytes, string directory)
         {
@@ -151,7 +151,7 @@
             if (asset == null || Updates.ParseVersion(asset.Version) <= Updates.ParseVersion(Updates.Current)) { if (!automatic) MessageBox.Show(this, "Ingen nyare version finns i vald kanal.", "Uppdateringar"); return; }
             if (automatic) { notice.Text = "Version " + asset.Version + " finns. Välj Hjälp → IT-inställningar → Sök efter uppdatering."; return; }
             if (Updates.Pending(ReceptionFiles.DataPath)) { MessageBox.Show(this, "Återställ den avbrutna läsningen innan du uppdaterar."); return; }
-            if (MessageBox.Show(this, "Version " + asset.Version + "\r\n\r\n" + asset.Notes + "\r\n\r\nHämta och installera? Programmet stängs och startas om. Lokala inställningar bevaras. Gratis privat bruk; kommersiellt bruk kräver betald licens.", "Uppdatera Brickläsaren", MessageBoxButtons.YesNo) != DialogResult.Yes) return;
+            if (MessageBox.Show(this, "Version " + asset.Version + "\r\n\r\n" + asset.Notes + "\r\n\r\nHämta och installera? Appen startas om när uppdateringen är klar. Dina inställningar sparas.", "Uppdatera Brickläsaren", MessageBoxButtons.YesNo) != DialogResult.Yes) return;
             SetBusy(true); ClearResults();
             try {
                 string staged = await Task.Run(delegate { return Updates.Stage(asset); });

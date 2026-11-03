@@ -20,8 +20,8 @@
             TableLayoutPanel root = Ui.Stack(); root.Padding = new Padding(24); Controls.Add(root);
             Ui.Add(root, Ui.Label("Anslut din läsare", 21F, true));
             AddText(root, "1. Anslut OMNIKEY 5427 CK till USB. Håll alla brickor borta tills programmet ber om en bricka.");
-            AddText(root, "2. Klicka på Försök ansluta. Om EEM-drivrutinen saknas öppnar Hämta USB-drivrutin tillverkarens officiella sida. Läs villkoren och följ installationsanvisningarna där. IT kan behöva hjälpa till.");
-            AddText(root, "3. Programmet förbereder läsaren automatiskt. Standardformatet fungerar utan referensbricka eller importerad läsarprofil.");
+            AddText(root, "2. Välj Försök ansluta. Om det inte fungerar: välj Hämta USB-drivrutin och följ anvisningarna på sidan. Be IT om hjälp om installationen kräver administratör.");
+            AddText(root, "3. Välj Försök ansluta igen efter installationen. När läsaren är klar kan du börja läsa brickor.");
             AddText(root, "Har anslutningen redan fungerat: prova en annan USB-port och kontrollera att bara en läsare används. Ditt val av passersystem är sparat.");
             if (!string.IsNullOrEmpty(result)) AddText(root, result);
             FlowLayoutPanel buttons = Ui.Row();

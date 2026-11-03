@@ -20,7 +20,7 @@ extension SelfTests {
     try rejects("Archive hash cannot be substituted") {
       try Updates.verify(Data("changed".utf8), asset: asset)
     }
-    for version in ["3.5", "3.5.0.1", "3.5.-1", "65536.0.0", "3.5.0\n", "x.0.0"] {
+    for version in ["3.5", "3.5.1.1", "3.5.-1", "65536.0.0", "3.5.1\n", "x.0.0"] {
       try rejects("Invalid version") { _ = try Updates.version(version) }
     }
     try check(
@@ -42,9 +42,12 @@ extension SelfTests {
     let controller = AppController(store: store, preview: true)
     controller.makeWindow()
     controller.outputs = ("123", "456")
-    controller.info = ReaderInfo(board: "mock", id: "", firmware: "", profile: "Standardformat", pending: false, ready: true)
+    controller.info = ReaderInfo(
+      board: "mock", id: "", firmware: "", profile: "Standardformat", pending: false, ready: true)
     controller.invalidateConnection()
-    try check(controller.outputs == nil && controller.info == nil && controller.reconnectPending, "USB/wake invalidation removes results and readiness")
+    try check(
+      controller.outputs == nil && controller.info == nil && controller.reconnectPending,
+      "USB/wake invalidation removes results and readiness")
     controller.window.close()
     let target = store.url("old.app")
     let candidate = store.url("new.app")

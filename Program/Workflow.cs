@@ -51,11 +51,11 @@
             copy.Items.AddRange(new object[] { "Av", "Första numret", "Andra numret (om det finns)", "Båda med rubriker (MIFARE + EM)" }); copy.SelectedIndex = value.Copy; Ui.Add(root, copy);
             CheckBox sounds = new CheckBox { Text = "Ljud för lägg på, lyft bort och klart", Checked = value.Sounds, AutoSize = true }; Ui.Add(root, sounds);
             Ui.Add(root, Ui.Label("Ctrl+R: Läs • Esc: Avbryt • Ctrl+1 / 2 / 3: Kopiera", 10, false));
-            Ui.Add(root, Ui.Label("Uppdateringar från GitHub", 17, true));
+            Ui.Add(root, Ui.Label("Uppdateringar", 17, true));
             ComboBox channel = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Width = 500 };
             channel.Items.AddRange(new object[] { "Stabil", "Förhandsversioner" }); channel.SelectedIndex = value.Channel == "preview" ? 1 : 0; Ui.Add(root, channel);
-            CheckBox auto = new CheckBox { Text = "Sök vid start (hämtar eller installerar inte programmet)", Checked = value.AutoCheck, AutoSize = true }; Ui.Add(root, auto);
-            Label info = Ui.Label("Privat källa eller ingen internetanslutning påverkar inte läsning. En uppdatering installeras först när du väljer det. Gratis privat bruk; kommersiellt bruk kräver betald Tobtech-licens. Se LICENSE.txt.", 10, false); info.MaximumSize = new Size(530, 0); Ui.Add(root, info);
+            CheckBox auto = new CheckBox { Text = "Sök efter nya versioner när appen startar", Checked = value.AutoCheck, AutoSize = true }; Ui.Add(root, auto);
+            Label info = Ui.Label("Du väljer själv när en uppdatering ska installeras.", 10, false); info.MaximumSize = new Size(530, 0); Ui.Add(root, info);
             Button save = Ui.Button("Spara", true); save.Click += delegate {
                 try {
                     WorkflowSettings next = new WorkflowSettings { Copy = copy.SelectedIndex, Sounds = sounds.Checked, Channel = channel.SelectedIndex == 1 ? "preview" : "stable", AutoCheck = auto.Checked };

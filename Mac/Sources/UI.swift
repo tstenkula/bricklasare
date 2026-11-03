@@ -196,7 +196,9 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
   }
   deinit {
     connectionTimer?.invalidate()
-    if let observer = wakeObserver { NSWorkspace.shared.notificationCenter.removeObserver(observer) }
+    if let observer = wakeObserver {
+      NSWorkspace.shared.notificationCenter.removeObserver(observer)
+    }
   }
   func applicationDidFinishLaunching(_ notification: Notification) {
     makeWindow()
@@ -221,7 +223,7 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
       contentRect: NSRect(x: 0, y: 0, width: 900, height: 720),
       styleMask: [.titled, .closable, .miniaturizable, .resizable], backing: .buffered, defer: false
     )
-    window.title = "Brickläsaren · 3.5.0 · macOS"
+    window.title = "Brickläsaren · 3.5.1 · macOS"
     window.isReleasedWhenClosed = false
     window.minSize = NSSize(width: 800, height: 600)
     window.backgroundColor = Theme.paper
@@ -280,10 +282,16 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
   }
   @objc func aboutApp() {
     let a = NSAlert()
-    a.messageText = "Brickläsaren 3.5.0 för macOS"
+    a.messageText = "Brickläsaren 3.5.1 för macOS"
     a.informativeText =
-      "RCO, Axema VAKA och Bewator med OMNIKEY 5427 CK.\nLokal läsning utan register eller skanningshistorik."
-    a.runModal()
+      "Tobtech\n\nGratis för privat bruk. Kommersiellt bruk kräver en betald licens."
+    a.addButton(withTitle: "Stäng")
+    a.addButton(withTitle: "Läs licensen")
+    if a.runModal() == .alertSecondButtonReturn,
+      let url = Bundle.main.url(forResource: "LICENSE", withExtension: "txt")
+    {
+      NSWorkspace.shared.open(url)
+    }
   }
   func clearResults() {
     outputs = nil
@@ -410,8 +418,8 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
       root,
       label(
         mode == .combo
-          ? "Använd samma bricka i båda stegen. Nya nummer läses endast när du väljer Läs bricka."
-          : "Nya nummer läses endast när du väljer Läs bricka.", size: 12, color: Theme.muted))
+          ? "Använd samma bricka i båda stegen."
+          : "Läs en bricka i taget.", size: 12, color: Theme.muted))
     setRoot(window, root)
   }
   func resultCard(_ title: String, _ detail: String, _ value: String, _ copy: String, index: Int)
@@ -441,7 +449,7 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
   func readyMessage() {
     warning = false
     if let info {
-      connection = "Läsaren är ansluten · Tangentbordsinmatning avstängd"
+      connection = "Läsaren är ansluten"
       if info.pending {
         stage = "HJÄLP BEHÖVS"
         instruction = "En läsning blev inte avslutad"
@@ -504,7 +512,7 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
       (error as? ReaderError)?.message
       ?? "Inställningen kunde inte läsas eller sparas. Kontrollera filbehörigheterna."
     // Only bounded codes and app/platform versions are persisted, never exception payloads/APDUs/card IDs.
-    try? store.writeData("senaste-fel.txt", Data("Brickläsaren 3.5.0 macOS\nKod: \(code)\n".utf8))
+    try? store.writeData("senaste-fel.txt", Data("Brickläsaren 3.5.1 macOS\nKod: \(code)\n".utf8))
     DispatchQueue.main.async {
       self.info = self.reconnectPending ? nil : info
       self.latestErrorCode = code
@@ -547,7 +555,9 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
           self.rebuild()
           if !reference, !self.reconnectPending, info.ready, let values {
             self.cue(3)
-            if let text = self.workflow.copyValue(values, combo: preference.Mode == .combo) { self.copy(text) }
+            if let text = self.workflow.copyValue(values, combo: preference.Mode == .combo) {
+              self.copy(text)
+            }
           }
         }
       } catch { self.finishError(error, info: engine.info) }

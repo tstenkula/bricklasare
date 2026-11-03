@@ -234,7 +234,7 @@
             Reject(delegate { Updates.Decode(changed, "preview"); }, "Tampered feed rejected");
             Updates.VerifyPackage(System.Text.Encoding.UTF8.GetBytes("fixture"), asset);
             Reject(delegate { Updates.VerifyPackage(System.Text.Encoding.UTF8.GetBytes("changed"), asset); }, "Tampered archive rejected");
-            foreach (string v in new string[] { "3.5", "3.5.0.1", "3.5.-1", "65536.0.0", "3.5.0\n", "x.0.0" }) Reject(delegate { Updates.ParseVersion(v); }, "Invalid version rejected");
+            foreach (string v in new string[] { "3.5", "3.5.1.1", "3.5.-1", "65536.0.0", "3.5.1\n", "x.0.0" }) Reject(delegate { Updates.ParseVersion(v); }, "Invalid version rejected");
             Check(Updates.ParseVersion("3.10.0") > Updates.ParseVersion("3.9.0"), "Numeric version comparison");
             Check(!new WorkflowSettings().Sounds && new WorkflowSettings().Copy == 0, "Sounds and automatic clipboard opt in");
             Check(WorkflowSettings.CopyValue(2, "123", "—", false) == "", "Missing second number not copied");

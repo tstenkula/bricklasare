@@ -1,4 +1,4 @@
-﻿// Reception v3.5.0 (PowerShell). Reader protocol remains in OmnikeyCore.cs.
+﻿// Reception v3.5.1 (PowerShell). Reader protocol remains in OmnikeyCore.cs.
 namespace Tobtech.OmnikeyRco
 {
     using System;
@@ -34,7 +34,7 @@ namespace Tobtech.OmnikeyRco
             {
                 return new string[] {
                     LauncherName,
-                    "Program/Starta-Bricklasaren.ps1",
+                    "Program/Starta-Bricklasaren.ps1", "Program/Bricklasaren.ico",
                     "Program/Entry.cs", "Program/OmnikeyCore.cs",
                     "Program/FirstStart.cs", "Program/Appearance.cs", "Program/SettingsDialogs.cs", "Program/ReliabilityTests.cs",
                     "Program/ReceptionSupport.cs", "Program/ReaderSafety.cs", "Program/ReceptionApp.cs",
@@ -208,8 +208,8 @@ namespace Tobtech.OmnikeyRco
         {
             lock (errorGate)
             {
-                return "BRICKLÄSAREN RECEPTION 3.5.0 – POWERSHELL\r\n" +
-                    "Läsarmotor: v3.5.0, standardformat med frivillig lokal IT-kalibrering.\r\n" +
+                return "BRICKLÄSAREN RECEPTION 3.5.1 – POWERSHELL\r\n" +
+                    "Läsarmotor: v3.5.1, standardformat med frivillig lokal IT-kalibrering.\r\n" +
                     "Rapport skapad: " + DateTime.Now.ToString("s") + "\r\n" +
                     "Inga skannade nummer, råsvar eller undantagsmeddelanden ingår.\r\n\r\n" +
                     (errorSummaries.Count == 0 ? "Inga fel registrerade under denna programkörning." : String.Join("\r\n", errorSummaries.ToArray()));
@@ -317,7 +317,7 @@ namespace Tobtech.OmnikeyRco
         {
             get
             {
-                return "BRICKLÄSAREN – RECEPTION 3.5.0\r\n\r\n" +
+                return "BRICKLÄSAREN 3.5.1\r\n\r\n" +
                     "Starta med " + ReceptionFiles.LauncherName + ".\r\n" +
                     "Första gången väljer du vilket passersystem du ska läsa för.\r\n" +
                     "Valet sparas direkt och används automatiskt vid nästa start.\r\n" +
@@ -330,7 +330,7 @@ namespace Tobtech.OmnikeyRco
                     "1. Klicka på Läs bricka.\r\n" +
                     "2. Följ stegen i huvudfönstret och lyft brickan när du blir ombedd.\r\n" +
                     "3. Kopiera önskat ID-nummer. Välj Läs nästa bricka för nytt kort.\r\n\r\n" +
-                    "Ingen CSV-export, inget brickregister och ingen integration mot passersystem.\r\n" +
+                    "Klistra in numret där du behöver det innan du läser nästa bricka.\r\n" +
                     "Inställningarna för läsaren och valt passersystem sparas, inte skanningarna.\r\n" +
                     "Programmet ställer automatiskt in läsaren så att kortnummer inte skrivs i andra fönster.\r\n" +
                     "Avläsning i programmet startar när du väljer Läs bricka.\r\n" +
@@ -478,7 +478,7 @@ namespace Tobtech.OmnikeyRco
             check(packageFiles.All(delegate(string p) {
                 string ext = Path.GetExtension(p).ToLowerInvariant();
                 bool sourceOrDocument = ext == ".cmd" || ext == ".ps1" || ext == ".cs" || ext == ".txt" || ext == ".md";
-                return sourceOrDocument;
+                return sourceOrDocument || p == "Program/Bricklasaren.ico";
             }));
             check(packageFiles.All(delegate(string p) { return !Path.IsPathRooted(p) && !p.Contains(".."); }));
             // A caller cannot change the allow-list used by the next export.
@@ -495,7 +495,6 @@ namespace Tobtech.OmnikeyRco
             check(!safe.Contains("12345678"));
             check(ReceptionFiles.SafeError(null) == "Ingen felinformation.");
             check(ReceptionFiles.SafeError(new ReaderStatusException(0x6985)).Contains("6985"));
-            check(ReceptionText.QuickStart.Contains("Ingen CSV-export"));
             return n;
         }
     }

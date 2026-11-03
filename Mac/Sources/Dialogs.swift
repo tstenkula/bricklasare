@@ -264,9 +264,16 @@ extension AppController {
         }
       ),
       ("Spara felrapport", { [weak self] in self?.exportReport() }),
-      ("Arbetsflöde och uppdateringskanal", { [weak self] in self?.editWorkflow() }),
-      ("Sök efter uppdatering", { [weak self] in self?.closeModalParents(); self?.checkUpdates() }),
+      ("Arbetsflöde och uppdateringar", { [weak self] in self?.editWorkflow() }),
+      (
+        "Sök efter uppdatering",
+        { [weak self] in
+          self?.closeModalParents()
+          self?.checkUpdates()
+        }
+      ),
       ("Guidad felsökning", { [weak self] in self?.diagnostics() }),
+      ("Om och licens", { [weak self] in self?.aboutApp() }),
       ("IT-inställningar", { [weak self] in self?.itSettings() }),
     ]
     for (title, action) in actions {
@@ -275,7 +282,7 @@ extension AppController {
     addFull(
       root,
       label(
-        "Mac-versionen använder USB och macOS inbyggda smartkortsstöd. Ingen IP-adress eller separat Windows-drivrutin behövs. Om ett tillbehör måste godkännas visas det av macOS.",
+        "Anslut läsaren med USB. Godkänn tillbehöret om din Mac frågar.",
         size: 13, color: Theme.muted))
     root.addArrangedSubview(button("Stäng") { [weak d] in d?.finish(false) })
     setRoot(d, root)
@@ -409,13 +416,16 @@ extension AppController {
     guard let url = saveURL("Bricklasaren-felrapport.txt", type: .plainText) else { return }
     do {
       let report =
-        "Brickläsaren 3.5.0 · macOS · Apple Silicon\nmacOS: \(ProcessInfo.processInfo.operatingSystemVersionString)\nFelkod: \(latestErrorCode.isEmpty ? "Ingen i denna session":latestErrorCode)\nLäsare ansluten: \(info == nil ? "Nej":"Ja")\nÅterställning väntar: \(info?.pending == true ? "Ja":"Nej")\nRapporten innehåller inga kortnummer, läsar-ID, profiler eller användarsökvägar.\n"
+        "Brickläsaren 3.5.1 · macOS · Apple Silicon\nmacOS: \(ProcessInfo.processInfo.operatingSystemVersionString)\nFelkod: \(latestErrorCode.isEmpty ? "Ingen i denna session":latestErrorCode)\nLäsare ansluten: \(info == nil ? "Nej":"Ja")\nÅterställning väntar: \(info?.pending == true ? "Ja":"Nej")\nRapporten innehåller inga kortnummer, läsar-ID, profiler eller användarsökvägar.\n"
       try Data(report.utf8).write(to: url, options: .atomic)
       notice = "Felrapporten är sparad."
       rebuild()
     } catch { showError(error) }
   }
-  func readerAction(_ message: String, success: String = "Åtgärden är klar.", action: @escaping (ReaderEngine) throws -> Void) {
+  func readerAction(
+    _ message: String, success: String = "Åtgärden är klar.",
+    action: @escaping (ReaderEngine) throws -> Void
+  ) {
     guard !busy else { return }
     clearResults()
     busy = true

@@ -17,7 +17,7 @@ try {
         Copy-Item -LiteralPath (Join-Path $root $file) -Destination $destination
     }
     $dist = Join-Path $root 'dist'; [IO.Directory]::CreateDirectory($dist) | Out-Null
-    $zip = Join-Path $dist 'Bricklasaren-3.5.0-Windows.zip'
+    $zip = Join-Path $dist 'Bricklasaren-3.5.1-Windows.zip'
     if (Test-Path -LiteralPath $zip) { Remove-Item -LiteralPath $zip }
     Add-Type -AssemblyName System.IO.Compression
     Add-Type -AssemblyName System.IO.Compression.FileSystem

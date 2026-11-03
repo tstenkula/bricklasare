@@ -109,6 +109,7 @@ namespace Tobtech.OmnikeyRco
     }
     public sealed partial class ReceptionForm : Form
     {
+        private Icon appIcon;
         private WorkflowSettings workflow;
         private readonly System.Windows.Forms.Timer reconnectTimer = new System.Windows.Forms.Timer { Interval = 1800 };
         private bool reconnectPending;
@@ -168,7 +169,9 @@ namespace Tobtech.OmnikeyRco
             profileChosen = preference != null;
             if (profileChosen) { mode = preference.Mode; rcoChip = preference.RcoChip; }
 
-            Text = "Brickläsaren · 3.5.0";
+            string iconPath = Path.Combine(ReceptionFiles.PackagePath, "Program", "Bricklasaren.ico");
+            if (File.Exists(iconPath)) { try { using (Icon source = new Icon(iconPath)) appIcon = (Icon)source.Clone(); Icon = appIcon; } catch (ArgumentException) { } catch (IOException) { } catch (UnauthorizedAccessException) { } }
+            Text = "Brickläsaren · 3.5.1";
             Font = Ui.GetFont(10F); ForeColor = Ui.Ink; BackColor = Ui.Paper;
             AutoScaleMode = AutoScaleMode.Dpi; AutoScaleDimensions = new SizeF(96F, 96F);
             StartPosition = FormStartPosition.CenterScreen;
@@ -240,7 +243,7 @@ namespace Tobtech.OmnikeyRco
                 e.Cancel = true; RequestCancel();
                 notice.Text = "Låt programmet avsluta läsningen. Stäng sedan fönstret igen.";
             };
-            log.Add("Receptionsgränssnitt 3.5.0 (PowerShell). Lokal diagnostik utan råa kortdata.");
+            log.Add("Receptionsgränssnitt 3.5.1 (PowerShell). Lokal diagnostik utan råa kortdata.");
             ApplyAppearance(); ApplyModeUi(); UpdateButtons();
             if (previewOnly) connection.Text = "Förhandsvisning · ingen läsarkontakt";
         }
@@ -264,6 +267,7 @@ namespace Tobtech.OmnikeyRco
             if (disposing && !resourcesDisposed)
             {
                 resourcesDisposed = true; reconnectTimer.Stop(); reconnectTimer.Dispose();
+                Icon = null; if (appIcon != null) { appIcon.Dispose(); appIcon = null; }
                 ClearResults();
                 Image previous = logo.Image; logo.Image = null;
                 if (previous != null) previous.Dispose();
@@ -326,7 +330,7 @@ namespace Tobtech.OmnikeyRco
         private void ApplyModeUi()
         {
             subtitle.Text = profileChosen ? FormatProfiles.Label(mode) : "Välj passersystem vid första starten";
-            foot.Text = mode == FormatProfiles.Combo ? "Använd samma bricka i båda stegen. Nya nummer läses endast när du väljer Läs bricka." : "En bricka, en avläsning. Nya nummer läses endast när du väljer Läs bricka.";
+            foot.Text = mode == FormatProfiles.Combo ? "Använd samma bricka i båda stegen." : "Läs en bricka i taget.";
             bool hasTwo = mode == FormatProfiles.Combo || mode == FormatProfiles.Rco;
             rightCard.Visible = hasTwo;
             outputs.ColumnStyles[0].Width = hasTwo ? 50 : 100;
@@ -425,7 +429,7 @@ namespace Tobtech.OmnikeyRco
             }
             else if (!profileChosen)
             {
-                connection.Text = "Läsaren är ansluten · Tangentbordsinmatning avstängd";
+                connection.Text = "Läsaren är ansluten";
                 SetInstruction("FÖRSTA STARTEN", "Välj passersystem", "Valet sparas och används automatiskt nästa gång du öppnar programmet.", false);
             }
             else if (!reader.CanRead)
@@ -435,7 +439,7 @@ namespace Tobtech.OmnikeyRco
             }
             else
             {
-                connection.Text = "Läsaren är ansluten · Tangentbordsinmatning avstängd";
+                connection.Text = "Läsaren är ansluten";
                 SetInstruction("KLAR ATT BÖRJA", "Klicka på Läs bricka", "Håll brickan borta från läsaren tills du blir ombedd att lägga på den.", false);
             }
         }
@@ -562,7 +566,7 @@ namespace Tobtech.OmnikeyRco
                 active = await Task.Run(delegate { return ReaderSafety.EnsureProtected(active, address, ReceptionFiles.DataPath, log, PreparationProgress); });
                 reader = active; outputProtected = true;
                 cancellation.Token.ThrowIfCancellationRequested();
-                connection.Text = "Väntar på nästa skanning · Tangentbordsinmatning avstängd";
+                connection.Text = "Väntar på nästa skanning";
                 if (isReference)
                 {
                     ReadyMessage(); notice.Text = "Kontrollen är godkänd. Den verifierade läsarprofilen används nu.";
@@ -590,7 +594,7 @@ namespace Tobtech.OmnikeyRco
                         mr.Text = FormatProfiles.Bewator13(result);
                         SetInstruction("KLART", "Bewator-numret är klart", "Kopiera numret och klicka på Läs nästa bricka.", false);
                     }
-                    notice.Text = "Numret visas bara här; inget brickregister skapas.";
+                    notice.Text = "Klart. Kopiera numret du behöver.";
                 }
             }
             catch (OperationCanceledException)
@@ -706,6 +710,7 @@ namespace Tobtech.OmnikeyRco
                 t.InvokeMember("TargetPath", System.Reflection.BindingFlags.SetProperty, null, shortcut, new object[] { launcher });
                 t.InvokeMember("Arguments", System.Reflection.BindingFlags.SetProperty, null, shortcut, new object[] { "" });
                 t.InvokeMember("WorkingDirectory", System.Reflection.BindingFlags.SetProperty, null, shortcut, new object[] { ReceptionFiles.PackagePath });
+                t.InvokeMember("IconLocation", System.Reflection.BindingFlags.SetProperty, null, shortcut, new object[] { Path.Combine(ReceptionFiles.PackagePath, "Program", "Bricklasaren.ico") + ",0" });
                 t.InvokeMember("Description", System.Reflection.BindingFlags.SetProperty, null, shortcut, new object[] { "Läs brickans nummer för valt passersystem" });
                 t.InvokeMember("Save", System.Reflection.BindingFlags.InvokeMethod, null, shortcut, new object[0]);
                 notice.Text = "Genvägen Brickläsaren finns nu på skrivbordet. Behåll programmappen på sin nuvarande plats.";
@@ -760,6 +765,7 @@ namespace Tobtech.OmnikeyRco
                 else if (d.Action == "Workflow") { using (WorkflowDialog options = new WorkflowDialog(workflow, appearanceDirectory)) { if (options.ShowDialog(this) == DialogResult.OK) workflow = options.Value; } }
                 else if (d.Action == "Updates") await CheckUpdates();
                 else if (d.Action == "Diagnostics") { await ConnectReader(); MessageBox.Show(this, reader == null ? "1. Ingen kontakt. Kontrollera USB-kabeln.\r\n2. Välj Anslut läsare för drivrutinsguiden.\r\n3. Spara felrapporten om det kvarstår." : !IsReady ? "Anslutningen fungerar. Profil eller återställning behöver åtgärdas under IT-inställningar. Spara felrapporten om det kvarstår." : "Kontroller godkända: kontakt, läsaridentitet, nummerformat och skydd mot tangentbordsinmatning. Läs en bricka för att kontrollera den i passersystemet.", "Felsökning"); }
+                else if (d.Action == "License") { if (MessageBox.Show(this, "Tobtech\r\n\r\nGratis för privat bruk. Kommersiellt bruk kräver en betald licens.\r\n\r\nÖppna licensvillkoren?", "Om Brickläsaren", MessageBoxButtons.YesNo) == DialogResult.Yes) System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(Path.Combine(ReceptionFiles.PackagePath, "LICENSE.txt")) { UseShellExecute = true }); }
                 else if (d.Action == "Appearance") ApplyAppearance();
                 else if (d.Action == "PrivateOff") await RestoreOriginalUsbMode();
                 else if (d.Action == "Shortcut") CreateDesktopShortcut();
@@ -805,9 +811,10 @@ namespace Tobtech.OmnikeyRco
             FlowLayoutPanel simple = Ui.Row(); simple.Controls.Add(ActionButton("Försök ansluta igen", "Connect")); simple.Controls.Add(ActionButton("Spara felrapport", "Report")); Ui.Add(root, simple);
             Label privacy = Ui.Label("Skannade nummer sparas inte. En felrapport innehåller bara tekniska feluppgifter.", 9.5F, false); privacy.MaximumSize = new Size(540, 0); Ui.Add(root, privacy);
             Ui.Add(root, ActionButton("Ny dator – anslut läsare", "Setup"));
-            Button more = Ui.Button("IT-inställningar", false); more.Font = Ui.GetFont(9.5F); Ui.Add(root, more);
+            Button more = Ui.Button("IT-inställningar", false); more.Font = Ui.GetFont(9.5F);
+            FlowLayoutPanel moreActions = Ui.Row(); moreActions.Controls.Add(more); moreActions.Controls.Add(ActionButton("Om och licens", "License")); Ui.Add(root, moreActions);
             TableLayoutPanel advanced = Ui.Stack(); advanced.Visible = false; advanced.Margin = new Padding(0, 18, 0, 0); Ui.Add(root, advanced);
-            Ui.Add(advanced, Ui.Label("För IT – inte del av receptionens dagliga arbete", 11F, true));
+            Ui.Add(advanced, Ui.Label("Läsare och utseende", 11F, true));
             Button appearance = Ui.Button("Utseende – färg och logotyp", false);
             appearance.Click += delegate {
                 using (AppearanceDialog options = new AppearanceDialog())
@@ -816,7 +823,7 @@ namespace Tobtech.OmnikeyRco
                 }
             };
             Ui.Add(advanced, appearance);
-            Ui.Add(advanced, ActionButton("Arbetsflöde och uppdateringskanal", "Workflow"));
+            Ui.Add(advanced, ActionButton("Arbetsflöde och uppdateringar", "Workflow"));
             Ui.Add(advanced, ActionButton("Sök efter uppdatering", "Updates"));
             Ui.Add(advanced, ActionButton("Guidad felsökning", "Diagnostics"));
             Button referenceSettings = Ui.Button("Ställ in referensbricka", false);
@@ -843,7 +850,7 @@ namespace Tobtech.OmnikeyRco
             Button test = ActionButton("Kontrollera referensbricka", "Reference"); test.Enabled = protectedOutput && connected && !pending;
             Button restore = ActionButton("Återställ läsaren", "Recover"); restore.Enabled = pending;
             service.Controls.Add(test); service.Controls.Add(restore); Ui.Add(advanced, service);
-            Ui.Add(advanced, Ui.Label("Version 3.5.0 · PowerShell · Programmet läser bricknummer.\r\nIngen integration, CSV-export eller skanningshistorik ingår.", 9F, false));
+            Ui.Add(advanced, Ui.Label("Version 3.5.1 · PowerShell · Programmet läser bricknummer.\r\nTobtech", 9F, false));
             more.Click += delegate
             {
                 advanced.Visible = !advanced.Visible;
