@@ -4,9 +4,11 @@
     using System.Collections.Generic;
     using System.IO;
     using System.Net;
+    using System.Net.NetworkInformation;
+    using System.Net.Sockets;
     using System.Text;
 
-    // In-memory policy and protocol tests. Never enumerate or contact actual hardware.
+    // Offline policy/protocol tests plus a Windows socket-option check. No connection is opened.
     internal static class ReaderNetworkTests
     {
         private static int count;
@@ -17,7 +19,9 @@
         private static void Reject(Action action, string message)
         {
             bool rejected = false;
-            try { action(); } catch (IOException) { rejected = true; }
+            try { action(); }
+            catch (InvalidDataException) { rejected = true; }
+            catch (IOException) { rejected = true; }
             Check(rejected, message);
         }
         private static ReaderAdapterEvidence Adapter(string address, string mask)
@@ -33,6 +37,7 @@
         public static int Run()
         {
             count = 0;
+            SocketInterfaceOption();
             foreach (string id in new[] { @"USB\VID_076B&PID_5427\synthetic", @"usb\vid_076b&pid_5428&mi_02\synthetic" })
                 Check(ReaderNetwork.IsReaderUsbId(id), "Exact supported USB hardware identity");
             foreach (string id in new[] { "OMNIKEY 5427", @"ROOT\VID_076B&PID_5427\synthetic", @"USB\VID_076B&PID_54270\synthetic", @"USB\VID_076C&PID_5427\synthetic", @"USB\VID_076B&PID_5127\synthetic", @"USB\VID_076B&PID_5427" })
@@ -89,11 +94,25 @@
             {
                 byte[] bytes = new byte[random.Next(0, 512)]; random.NextBytes(bytes);
                 try { using (MemoryStream input = new MemoryStream(bytes)) ReaderNetwork.ReadResponse(input, delegate { return false; }); }
-                catch (InvalidDataException) { }
-                catch { bounded = false; break; }
+                catch (InvalidDataException) { } // Malformed memory input must fail as protocol data.
+                catch { bounded = false; break; } // Preserve failures for every unexpected exception type.
             }
             Check(bounded, "One thousand malformed byte sequences fail safely");
             return count;
+        }
+        private static void SocketInterfaceOption()
+        {
+            // Exercise Windows Winsock ABI/byte order without binding, connecting, or sending traffic.
+            int index = NetworkInterface.LoopbackInterfaceIndex;
+            Check(index > 0 && index <= 0x00FFFFFF, "Windows exposes a usable loopback interface index");
+            using (Socket socket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp))
+            {
+                socket.SetSocketOption(SocketOptionLevel.IP, (SocketOptionName)31, IPAddress.HostToNetworkOrder(index));
+                Check((int)socket.GetSocketOption(SocketOptionLevel.IP, (SocketOptionName)31) == index,
+                    "Windows IP_UNICAST_IF setter uses network order and getter returns host order");
+                Check(!socket.Connected && socket.LocalEndPoint == null,
+                    "Socket option verification opens no network connection or local endpoint");
+            }
         }
         private sealed class TimeoutStream : MemoryStream
         {
