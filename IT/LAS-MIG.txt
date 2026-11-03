@@ -1,4 +1,4 @@
-BRICKLÄSAREN – 3.5.2 / IT
+BRICKLÄSAREN – 3.6.0 / IT
 2026-11-03
 
 LEVERANS
@@ -106,7 +106,7 @@ Samma sökväg behålls för kompatibilitet med fungerande läsarprofil.
 - usb-mode-<ID>.lock: låsfil; ett kvarvarande tomt filnamn är normalt.
 - sjalvtest-reception.txt och felrapporter: teknisk status utan skannade ID.
 
-Packa upp 3.5.2 i en egen mapp och starta dess CMD-fil. Byt en eventuell
+Packa upp 3.6.0 i en egen mapp och starta dess CMD-fil. Byt en eventuell
 genväg först när den ska peka på 3.3. Kör bara en version mot läsaren åt
 gången. v3.1 ändras inte, men läsarens Custom Report-läge är beständigt.
 Skapa receptionspaket under Hjälp exporterar programmet

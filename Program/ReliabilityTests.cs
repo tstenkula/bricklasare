@@ -35,6 +35,10 @@
                 count += ReaderNetworkTests.Run();
                 ExerciseUpdates(directory);
                 ExerciseFirstStart(Path.Combine(directory, "first-start"));
+                ExerciseReaderWorkspace(Path.Combine(directory, "workspace"));
+                ExerciseLateReaderCompletion(Path.Combine(directory, "late-completion"));
+                ExerciseWorkflow(Path.Combine(directory, "workflow"));
+                ExerciseExport(Path.Combine(directory, "export"));
                 LocalLog log = new LocalLog(); log.Add("old-entry");
                 for (int i = 0; i < 2600; i++) log.Transport(true, i);
                 string trace = log.Text();
@@ -100,6 +104,7 @@
                 }
                 using (Bitmap loaded = AppearanceFiles.LoadLogo(directory, AppearanceFiles.Load(directory)))
                     Check(loaded != null && loaded.Width == 120 && loaded.GetPixel(0, 0).A == 0, "Transparency survives import");
+                ExerciseDisplayLogo(Path.Combine(directory, "display-logo"));
                 File.WriteAllText(input, new string('x', 40)); Reject(delegate { using (Bitmap invalid = AppearanceFiles.ReadLogo(input)) { } }, "Malformed image rejected");
                 using (Bitmap huge = new Bitmap(2049, 1)) huge.Save(input, ImageFormat.Png);
                 Reject(delegate { using (Bitmap invalid = AppearanceFiles.ReadLogo(input)) { } }, "Oversize dimensions rejected before decoding");
@@ -162,6 +167,192 @@
                 return count;
             }
             finally { Ui.SetAppearance(AppearanceSettings.Default()); Ui.DisposeFonts(); Directory.Delete(directory, true); }
+        }
+        private static T Field<T>(object instance, string name)
+        {
+            return (T)instance.GetType().GetField(name, System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic).GetValue(instance);
+        }
+        private static void SetField(object instance, string name, object value)
+        {
+            instance.GetType().GetField(name, System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic).SetValue(instance, value);
+        }
+        private static object Call(object instance, string name, params object[] arguments)
+        {
+            return instance.GetType().GetMethod(name, System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic).Invoke(instance, arguments);
+        }
+        private static ReceptionForm ReaderPreview(string directory, string mode)
+        {
+            Directory.CreateDirectory(directory);
+            FakeReader fake = new FakeReader();
+            ReaderClient reader = new ReaderClient("192.168.63.99", directory, new LocalLog()); reader.TestTransport = fake.Send; reader.Connect();
+            ReceptionForm form = new ReceptionForm(true, directory);
+            SetField(form, "reader", reader); SetField(form, "profileChosen", true); SetField(form, "outputProtected", true); SetField(form, "mode", mode);
+            Call(form, "ApplyModeUi"); return form;
+        }
+        private static void PreviewResults(ReceptionForm form, string first, string second)
+        {
+            // Fixtures only: these are fabricated numbers, never values from a connected reader.
+            Field<TextBox>(form, "mr").Text = first; Field<TextBox>(form, "er").Text = second;
+            Call(form, "SetInstruction", "KLART", "Läsningen är klar", "Kopiera numret du behöver. Läs sedan nästa bricka.", false);
+            Call(form, "UpdateButtons");
+        }
+        private static bool Inside(Form form, Control control)
+        {
+            return control.Visible && form.ClientRectangle.Contains(form.RectangleToClient(control.RectangleToScreen(control.ClientRectangle)));
+        }
+        private static void ExerciseReaderWorkspace(string directory)
+        {
+            using (ReceptionForm form = ReaderPreview(directory, FormatProfiles.Combo))
+            {
+                form.Show(); form.Activate(); Application.DoEvents();
+                Check(Field<Label>(form, "leftState").Text == "Väntar på läsning", "Empty result explains that a scan is needed");
+                Check(!Field<Button>(form, "clear").Enabled && !Field<Button>(form, "copyM").Enabled, "Empty results cannot be copied or cleared");
+                Check(Field<TextBox>(form, "mr").Font.Size >= 32F, "Reader numbers remain large");
+                Check(Inside(form, Field<Button>(form, "read")) && Inside(form, Field<Button>(form, "copyE")), "Read and result actions fit the default workspace");
+                Call(form, "SetBusy", true); Check(Field<TextBox>(form, "keyboardSink").Focused, "Busy reader input stays in the protected sink");
+                Call(form, "SetBusy", false); Check(Field<Button>(form, "read").Focused, "Connection completion returns keyboard focus to Read");
+                Check((bool)Call(form, "ProcessCmdKey", new Message(), Keys.Enter) && (bool)Call(form, "ProcessCmdKey", new Message(), Keys.D5), "Reader Enter and digit filtering stays enabled");
+                PreviewResults(form, "102700513", "051501029");
+                Check(Field<Button>(form, "clear").Enabled && Field<Button>(form, "read").Text == "Läs nästa bricka", "Finished results expose next scan and clear actions");
+                Check(Field<Button>(form, "copyM").AccessibleDescription.Contains("Ctrl+1") && Field<TextBox>(form, "mr").AccessibleName.Contains("MIFARE"), "Number and copy controls identify their purpose");
+                Field<Button>(form, "clear").PerformClick();
+                Check(Field<TextBox>(form, "mr").Text == "—" && Field<TextBox>(form, "er").Text == "—" && !Field<Button>(form, "clear").Enabled, "Clear removes both displayed results");
+                Check(Field<Label>(form, "instruction").Text == "Läs en ny bricka" && Field<Button>(form, "read").Focused, "Clear returns to the ready step and keyboard action");
+                SetField(form, "reader", null); SetField(form, "outputProtected", false);
+                Call(form, "SetBusy", true); Call(form, "SetBusy", false);
+                Check(Field<Button>(form, "setup").Focused, "Failed connection focuses the available connection action");
+            }
+            Render(ReaderPreview(directory, FormatProfiles.Combo), "arbetsyta-klar");
+            using (System.Threading.CancellationTokenSource cancellation = new System.Threading.CancellationTokenSource())
+            {
+                ReceptionForm reading = ReaderPreview(directory, FormatProfiles.Combo); SetField(reading, "cancellation", cancellation);
+                Call(reading, "SetBusy", true);
+                Call(reading, "SetInstruction", "STEG 1 AV 2", "Lägg på brickan", "Håll kvar tills programmet ber dig lyfta bort den.", false);
+                Render(reading, "arbetsyta-laser");
+            }
+            ReceptionForm complete = ReaderPreview(directory, FormatProfiles.Combo); PreviewResults(complete, "102700513", "051501029"); Render(complete, "arbetsyta-resultat");
+            ReceptionForm problem = ReaderPreview(directory, FormatProfiles.Combo); SetField(problem, "outputProtected", false);
+            Field<Label>(problem, "connection").Text = "Läsaren behöver återställas";
+            Call(problem, "SetInstruction", "HJÄLP BEHÖVS", "Läsaren behöver återställas", "Låt USB-kabeln sitta i. Välj Hjälp och be IT hjälpa dig innan nästa bricka.", true);
+            Call(problem, "UpdateButtons"); Render(problem, "arbetsyta-hjalp-behovs");
+            ReceptionForm rco = ReaderPreview(directory, FormatProfiles.Rco); PreviewResults(rco, "102700513", "0016909060"); Render(rco, "arbetsyta-rco");
+            ReceptionForm vaka = ReaderPreview(directory, FormatProfiles.Axema); PreviewResults(vaka, "00123456789012", "—"); Render(vaka, "arbetsyta-vaka");
+            ReceptionForm small = ReaderPreview(directory, FormatProfiles.Combo); small.ClientSize = new Size(800, 600); PreviewResults(small, "102700513", "051501029");
+            small.Show(); Application.DoEvents();
+            Check(Inside(small, Field<Button>(small, "copyE")) && Inside(small, Field<Button>(small, "clear")), "Small workspace keeps copy and clear actions visible");
+            Render(small, "arbetsyta-kompakt");
+            ReceptionForm scaled = ReaderPreview(directory, FormatProfiles.Rco); PreviewResults(scaled, "102700513", "0016909060");
+            scaled.Scale(new SizeF(1.5F, 1.5F)); scaled.ClientSize = new Size(1200, 900); scaled.Show(); Application.DoEvents();
+            Check(Inside(scaled, Field<Button>(scaled, "copyE")) && Inside(scaled, Field<Button>(scaled, "read")), "Scaled workspace keeps primary and result actions visible");
+            Render(scaled, "arbetsyta-skalad-150");
+        }
+        private static void RejectPublication(ReceptionForm form, ReaderClient reader, System.Threading.CancellationToken token, string description)
+        {
+            bool rejected = false;
+            try { Call(form, "PublishScanResult", new ScanResult { Mr = "102700513", Er = "051501029" }, reader, FormatProfiles.Combo, "M", false, token); }
+            catch (System.Reflection.TargetInvocationException ex) { if (!(ex.InnerException is OperationCanceledException)) throw; rejected = true; }
+            Check(rejected && Field<TextBox>(form, "mr").Text == "—" && Field<TextBox>(form, "er").Text == "—" && Field<string>(form, "lastCopied") == "", description);
+        }
+        private static void ExerciseLateReaderCompletion(string directory)
+        {
+            using (ReceptionForm form = ReaderPreview(directory, FormatProfiles.Combo))
+            using (System.Threading.CancellationTokenSource cancelled = new System.Threading.CancellationTokenSource())
+            {
+                ReaderClient reader = Field<ReaderClient>(form, "reader");
+                Field<WorkflowSettings>(form, "workflow").Copy = 1;
+                cancelled.Cancel();
+                RejectPublication(form, reader, cancelled.Token, "Late completion after cancellation cannot publish results for automatic copying");
+                Call(form, "InvalidateReaderConnection");
+                // Simulate the final protection await returning after USB invalidation.
+                SetField(form, "outputProtected", true);
+                RejectPublication(form, reader, System.Threading.CancellationToken.None, "Late restoration cannot republish results from an invalidated USB connection");
+                Call(form, "UpdateButtons");
+                Check(!Field<Button>(form, "read").Enabled && !Field<Button>(form, "copyM").Enabled, "Pending reconnection blocks reading and copying");
+                Check(!(bool)Call(form, "TryBeginFileOperation", true) && !Field<bool>(form, "busy"), "Export cannot claim an invalidated reader after the folder dialog");
+                SetField(form, "reconnectPending", false);
+                SetField(form, "reader", null);
+                RejectPublication(form, reader, System.Threading.CancellationToken.None, "A detached reader cannot publish a late result");
+                Check(!(bool)Call(form, "TryBeginFileOperation", true), "Export rejects a reader lost while its dialog was open");
+                SetField(form, "reader", reader);
+                Call(reader, "set_CalibrationIssue", "Synthetic profile failure");
+                Check(!reader.CanRead, "Late-result fixture has a reader that is no longer ready");
+                RejectPublication(form, reader, System.Threading.CancellationToken.None, "Completed numbers from a reader that is no longer ready are not displayed or copied");
+                Call(reader, "set_CalibrationIssue", new object[] { null });
+                SetField(form, "profileChosen", false);
+                RejectPublication(form, reader, System.Threading.CancellationToken.None, "Normal results require a chosen access-system format at publication");
+                SetField(form, "profileChosen", true);
+                Call(form, "SetBusy", true);
+                Check(!(bool)Call(form, "TryBeginFileOperation", false) && Field<bool>(form, "busy"), "Report saving never takes ownership from an in-flight reconnect");
+                Check(!(bool)Call(form, "TryBeginFileOperation", true) && Field<bool>(form, "busy"), "Export never takes ownership from an in-flight reconnect");
+                Call(form, "SetBusy", false);
+                Check((bool)Call(form, "TryBeginFileOperation", true) && Field<bool>(form, "busy"), "Ready export acquires its own busy lifetime");
+                Call(form, "SetBusy", false);
+                Call(form, "PublishScanResult", new ScanResult { Mr = "102700513", Er = "051501029" }, reader, FormatProfiles.Combo, "M", false, System.Threading.CancellationToken.None);
+                Check((bool)Call(form, "get_HasResults") && Field<Label>(form, "instruction").Text == "Läsningen är klar", "Healthy completion still publishes the validated numbers");
+            }
+        }
+        private static void ExerciseWorkflow(string directory)
+        {
+            Directory.CreateDirectory(directory); string path = Path.Combine(directory, "arbetsflode.json");
+            using (WorkflowDialog dialog = new WorkflowDialog(new WorkflowSettings(), directory))
+            {
+                dialog.Show(); dialog.ClientSize = new Size(530, 360); Application.DoEvents();
+                Check(dialog.AutoScaleMode == AutoScaleMode.Dpi && dialog.AcceptButton != null && dialog.CancelButton != null, "Workflow supports DPI and standard save/cancel keys");
+                Check(Inside(dialog, (Control)dialog.AcceptButton) && Inside(dialog, (Control)dialog.CancelButton), "Workflow footer remains visible in a small window");
+                ((ComboBox)Find(dialog, "Kopiera automatiskt", true)).SelectedIndex = 2;
+                ((Button)dialog.CancelButton).PerformClick();
+            }
+            Check(!File.Exists(path), "Cancelling workflow changes creates no settings");
+            using (WorkflowDialog dialog = new WorkflowDialog(new WorkflowSettings(), directory))
+            {
+                dialog.Show(); Application.DoEvents();
+                ((ComboBox)Find(dialog, "Kopiera automatiskt", true)).SelectedIndex = 3;
+                ((ComboBox)Find(dialog, "Versioner", true)).SelectedIndex = 1;
+                ((Button)dialog.AcceptButton).PerformClick();
+            }
+            WorkflowSettings saved = WorkflowSettings.Load(directory);
+            Check(saved.Copy == 3 && saved.Channel == "preview", "Workflow save retains the chosen values");
+        }
+        private static void ExerciseDisplayLogo(string directory)
+        {
+            Directory.CreateDirectory(directory); AppearanceSettings settings = AppearanceSettings.Default();
+            using (Bitmap original = new Bitmap(2048, 1024))
+            {
+                using (Graphics graphics = Graphics.FromImage(original)) { graphics.Clear(Color.Transparent); graphics.FillRectangle(Brushes.Navy, 256, 256, 1280, 512); }
+                AppearanceFiles.Save(directory, settings, original);
+            }
+            using (Bitmap display = AppearanceFiles.LoadDisplayLogo(directory, settings, new Size(360, 128)))
+            {
+                Check(display.Width == 256 && display.Height == 128 && display.GetPixel(0, 0).A == 0, "Display logo preserves aspect ratio and transparency");
+                Check(display.Width * display.Height * 4 <= 128 * 1024, "Large logo display copy has a bounded pixel footprint");
+            }
+            using (Bitmap original = AppearanceFiles.LoadLogo(directory, settings))
+                Check(original.Width == 2048 && original.Height == 1024, "Display downsampling leaves the editable original untouched");
+            using (Bitmap display = AppearanceFiles.LoadDisplayLogo(directory, settings, new Size(540, 192)))
+                Check(display.Width == 384 && display.Height == 192, "Display copy adapts to a larger DPI footprint");
+            using (ReceptionForm form = new ReceptionForm(true, directory))
+            {
+                Image display = Field<PictureBox>(form, "logo").Image;
+                Check(display != null && display.Width <= 360 && display.Height <= 128, "Main workspace retains the small display bitmap");
+            }
+        }
+        private static void ExerciseExport(string directory)
+        {
+            Directory.CreateDirectory(directory); string unrelated = Path.Combine(directory, "behall.txt"); File.WriteAllText(unrelated, "keep");
+            bool failed = false;
+            try
+            {
+                ReceptionForm.ExportPackageFiles("unused", directory, null, delegate(string source, string destination) {
+                    Directory.CreateDirectory(destination); File.WriteAllText(Path.Combine(destination, "partial.txt"), "partial"); throw new IOException("synthetic failure");
+                });
+            }
+            catch (IOException) { failed = true; }
+            Check(failed && Directory.GetDirectories(directory).Length == 0 && File.ReadAllText(unrelated) == "keep", "Failed export removes only its own partial directory");
+            string output = ReceptionForm.ExportPackageFiles("unused", directory, null, delegate(string source, string destination) {
+                Directory.CreateDirectory(destination); File.WriteAllText(Path.Combine(destination, "program.txt"), "synthetic program");
+            });
+            Check(Directory.Exists(output) && File.Exists(Path.Combine(output, "Snabbstart.txt")) && !File.Exists(Path.Combine(output, ReceptionFiles.ProfileName)), "Completed standard package contains no invented reader profile");
+            Check(Directory.GetDirectories(directory).Length == 1 && File.ReadAllText(unrelated) == "keep", "Export leaves no staging directory and preserves surrounding files");
         }
         private static void ExerciseFirstStart(string directory)
         {
@@ -242,7 +433,7 @@
             Reject(delegate { Updates.Decode(changed, "preview"); }, "Tampered feed rejected");
             Updates.VerifyPackage(System.Text.Encoding.UTF8.GetBytes("fixture"), asset);
             Reject(delegate { Updates.VerifyPackage(System.Text.Encoding.UTF8.GetBytes("changed"), asset); }, "Tampered archive rejected");
-            foreach (string v in new string[] { "3.5", "3.5.2.1", "3.5.-1", "65536.0.0", "3.5.2\n", "x.0.0" }) Reject(delegate { Updates.ParseVersion(v); }, "Invalid version rejected");
+            foreach (string v in new string[] { "3.5", "3.6.0.1", "3.5.-1", "65536.0.0", "3.6.0\n", "x.0.0" }) Reject(delegate { Updates.ParseVersion(v); }, "Invalid version rejected");
             Check(Updates.ParseVersion("3.10.0") > Updates.ParseVersion("3.9.0"), "Numeric version comparison");
             Check(!new WorkflowSettings().Sounds && new WorkflowSettings().Copy == 0, "Sounds and automatic clipboard opt in");
             Check(WorkflowSettings.CopyValue(2, "123", "—", false) == "", "Missing second number not copied");

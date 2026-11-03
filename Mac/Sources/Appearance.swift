@@ -61,7 +61,34 @@ struct Theme {
     return (max(x, y) + 0.05) / (min(x, y) + 0.05)
   }
 }
+// UI-owned cache. A changed filename is revalidated once; scanning never reloads image files.
+final class AppearanceCache {
+  private var colorKey = "", cachedTheme = Theme("#003B55")
+  private var logoKey: String?, cachedLogo: NSImage?
+  func theme(_ hex: String) -> Theme {
+    if colorKey != hex { colorKey = hex; cachedTheme = Theme(hex) }
+    return cachedTheme
+  }
+  func logo(_ store: Store, settings: AppearanceSettings) -> NSImage? {
+    let key = store.root.path + "/" + settings.LogoFile
+    if logoKey != key {
+      logoKey = key
+      cachedLogo = AppearanceFiles.loadedLogo(store, settings).flatMap(AppearanceFiles.thumbnail)
+    }
+    return cachedLogo
+  }
+}
 enum AppearanceFiles {
+  static func thumbnail(_ data: Data) -> NSImage? {
+    guard let source = CGImageSourceCreateWithData(data as CFData, nil),
+      let image = CGImageSourceCreateThumbnailAtIndex(source, 0, [
+        kCGImageSourceCreateThumbnailFromImageAlways: true,
+        kCGImageSourceThumbnailMaxPixelSize: 440,
+        kCGImageSourceCreateThumbnailWithTransform: true,
+      ] as CFDictionary)
+    else { return nil }
+    return NSImage(cgImage: image, size: NSSize(width: image.width, height: image.height))
+  }
   static func load(_ store: Store) -> AppearanceSettings {
     guard let a: AppearanceSettings = try? store.read("utseende.json"), (try? a.validate()) != nil
     else { return AppearanceSettings() }

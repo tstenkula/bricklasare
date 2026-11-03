@@ -7,7 +7,7 @@ final class ActionButton: NSButton {
   var theme: Theme
   init(
     _ title: String, primary: Bool = false, theme: Theme = Theme("#003B55"),
-    action: @escaping () -> Void
+    height: CGFloat = 40, action: @escaping () -> Void
   ) {
     self.primary = primary
     self.theme = theme
@@ -20,20 +20,33 @@ final class ActionButton: NSButton {
     isBordered = false
     font = .systemFont(ofSize: 13, weight: .semibold)
     translatesAutoresizingMaskIntoConstraints = false
-    heightAnchor.constraint(greaterThanOrEqualToConstant: 44).isActive = true
+    heightAnchor.constraint(greaterThanOrEqualToConstant: height).isActive = true
     widthAnchor.constraint(greaterThanOrEqualToConstant: max(100, CGFloat(title.count) * 7 + 30))
       .isActive = true
     setAccessibilityLabel(title)
+    if primary { keyEquivalent = "\r" }
+    if title == "Avbryt" || title == "Stäng" { keyEquivalent = "\u{1b}" }
   }
   required init?(coder: NSCoder) { fatalError("init(coder:) is not supported") }
   @objc private func clicked() { actionBlock?() }
+  override func becomeFirstResponder() -> Bool {
+    let accepted = super.becomeFirstResponder()
+    needsDisplay = true
+    return accepted
+  }
+  override func resignFirstResponder() -> Bool {
+    let accepted = super.resignFirstResponder()
+    needsDisplay = true
+    return accepted
+  }
   override func draw(_ dirtyRect: NSRect) {
-    let background = primary ? theme.accent : .white
+    let base = primary ? theme.accent : .white
+    let background = isHighlighted ? Theme.mix(base, .black, 0.1) : base
     (isEnabled ? background : Theme.mix(background, Theme.paper, 0.6)).setFill()
-    NSBezierPath(rect: bounds).fill()
+    NSBezierPath(roundedRect: bounds, xRadius: 7, yRadius: 7).fill()
     if !primary {
       NSColor(srgbRed: 0.72, green: 0.78, blue: 0.81, alpha: 1).setStroke()
-      NSBezierPath(rect: bounds.insetBy(dx: 0.5, dy: 0.5)).stroke()
+      NSBezierPath(roundedRect: bounds.insetBy(dx: 0.5, dy: 0.5), xRadius: 7, yRadius: 7).stroke()
     }
     let color = isEnabled ? (primary ? theme.buttonText : Theme.ink) : Theme.muted
     let paragraph = NSMutableParagraphStyle()
@@ -47,7 +60,7 @@ final class ActionButton: NSButton {
     s.draw(in: NSRect(x: 8, y: (bounds.height - h) / 2, width: bounds.width - 16, height: h + 2))
     if window?.firstResponder === self {
       NSColor.keyboardFocusIndicatorColor.setStroke()
-      let p = NSBezierPath(rect: bounds.insetBy(dx: 3, dy: 3))
+      let p = NSBezierPath(roundedRect: bounds.insetBy(dx: 3, dy: 3), xRadius: 5, yRadius: 5)
       p.lineWidth = 2
       p.stroke()
     }
@@ -69,6 +82,7 @@ func stack(_ views: [NSView] = [], horizontal: Bool = false, spacing: CGFloat = 
   let s = NSStackView(views: views)
   s.orientation = horizontal ? .horizontal : .vertical
   s.alignment = horizontal ? .centerY : .leading
+  s.distribution = .fill
   s.spacing = spacing
   s.translatesAutoresizingMaskIntoConstraints = false
   return s
@@ -77,10 +91,11 @@ func addFull(_ parent: NSStackView, _ child: NSView) {
   parent.addArrangedSubview(child)
   child.widthAnchor.constraint(equalTo: parent.widthAnchor).isActive = true
 }
-func cardPanel(_ contents: NSStackView, color: NSColor, padding: CGFloat = 20) -> NSView {
+func cardPanel(_ contents: NSStackView, color: NSColor, padding: CGFloat = 16) -> NSView {
   let p = NSView()
   p.wantsLayer = true
   p.layer?.backgroundColor = color.cgColor
+  p.layer?.cornerRadius = 10
   p.translatesAutoresizingMaskIntoConstraints = false
   p.addSubview(contents)
   NSLayoutConstraint.activate([
@@ -95,6 +110,7 @@ final class FlippedView: NSView { override var isFlipped: Bool { true } }
 func setRoot(_ window: NSWindow, _ root: NSStackView) {
   let scroll = NSScrollView()
   scroll.hasVerticalScroller = true
+  scroll.autohidesScrollers = true
   scroll.drawsBackground = true
   scroll.backgroundColor = Theme.paper
   let document = FlippedView()
@@ -104,10 +120,10 @@ func setRoot(_ window: NSWindow, _ root: NSStackView) {
   window.contentView = scroll
   NSLayoutConstraint.activate([
     document.widthAnchor.constraint(equalTo: scroll.contentView.widthAnchor),
-    root.leadingAnchor.constraint(equalTo: document.leadingAnchor, constant: 28),
-    root.trailingAnchor.constraint(equalTo: document.trailingAnchor, constant: -28),
-    root.topAnchor.constraint(equalTo: document.topAnchor, constant: 26),
-    root.bottomAnchor.constraint(equalTo: document.bottomAnchor, constant: -26),
+    root.leadingAnchor.constraint(equalTo: document.leadingAnchor, constant: 24),
+    root.trailingAnchor.constraint(equalTo: document.trailingAnchor, constant: -24),
+    root.topAnchor.constraint(equalTo: document.topAnchor, constant: 20),
+    root.bottomAnchor.constraint(equalTo: document.bottomAnchor, constant: -20),
   ])
 }
 final class Dialog: NSWindow, NSWindowDelegate {
@@ -124,6 +140,7 @@ final class Dialog: NSWindow, NSWindowDelegate {
     self.minSize = NSSize(width: 500, height: 350)
     self.delegate = self
   }
+  override func cancelOperation(_ sender: Any?) { finish(false) }
   func finish(_ accepted: Bool) {
     self.accepted = accepted
     NSApp.stopModal()
@@ -164,16 +181,213 @@ func confirm(_ title: String, _ message: String) -> Bool {
   return a.runModal() == .alertFirstButtonReturn
 }
 
+final class ResultView {
+  let title = label("", size: 14, bold: true)
+  let detail = label("", size: 12, color: Theme.muted)
+  let number = label("—", size: 32)
+  let empty = label("Väntar på läsning", size: 11, color: Theme.muted)
+  let copyButton: ActionButton
+  let panel: NSView
+  init(index: Int, controller: AppController) {
+    number.font = .monospacedDigitSystemFont(ofSize: 32, weight: .medium)
+    number.maximumNumberOfLines = 1
+    number.setContentCompressionResistancePriority(.required, for: .horizontal)
+    number.setAccessibilityLabel(index == 0 ? "Första ID-numret" : "Andra ID-numret")
+    copyButton = ActionButton("Kopiera nummer") { [weak controller] in
+      guard let controller, let values = controller.outputs else { return }
+      controller.copy(index == 0 ? values.0 : values.1)
+    }
+    let body = stack([title, detail, number, empty, copyButton], spacing: 6)
+    for view in [title, detail, empty, copyButton] {
+      view.widthAnchor.constraint(equalTo: body.widthAnchor).isActive = true
+    }
+    panel = cardPanel(body, color: .white, padding: 14)
+  }
+  func update(title: String, detail: String, value: String?, copy: String, enabled: Bool, theme: Theme) {
+    self.title.stringValue = title
+    self.detail.stringValue = detail
+    number.stringValue = value ?? "—"
+    empty.stringValue = value == nil ? "Väntar på läsning" : " "
+    copyButton.title = copy
+    copyButton.setAccessibilityLabel(copy)
+    copyButton.isEnabled = enabled && value != nil
+    copyButton.theme = theme
+    copyButton.needsDisplay = true
+  }
+  func clear() {
+    number.stringValue = "—"
+    empty.stringValue = "Väntar på läsning"
+    copyButton.isEnabled = false
+  }
+}
+
+// Stable views preserve keyboard focus and avoid rebuilding/decoding branding during a scan.
+final class ReaderView {
+  let root = stack(spacing: 14)
+  let branding = stack(spacing: 4)
+  let logo = NSImageView()
+  let organization = label("", size: 14, bold: true)
+  let subtitle = label("", size: 12, color: Theme.muted)
+  let mode = label("", size: 13, color: Theme.muted)
+  let status = label("", size: 12, color: Theme.muted)
+  let stage = label("", size: 11, bold: true)
+  let instruction = label("", size: 25, bold: true)
+  let hint = label("", size: 13, color: Theme.muted)
+  let notice = label("", size: 12)
+  let footer = label("", size: 11, color: Theme.muted)
+  let readButton: ActionButton, cancelButton: ActionButton, connectButton: ActionButton
+  let helpButton: ActionButton, bothButton: ActionButton, clearButton: ActionButton
+  let first: ResultView, second: ResultView
+  let instructionPanel: NSView
+  private var lastInstruction = ""
+
+  init(_ controller: AppController) {
+    readButton = ActionButton("Läs bricka", primary: true, height: 44) { [weak controller] in
+      controller?.scan()
+    }
+    // Reading has its own explicit shortcut; Return remains safe in settings and text fields.
+    readButton.keyEquivalent = ""
+    readButton.setAccessibilityHelp("Läs en bricka. Kortkommando: kommando R.")
+    cancelButton = ActionButton("Avbryt") { [weak controller] in
+      controller?.token?.cancel()
+      controller?.clearResults()
+      controller?.notice = "Avbryter och återställer läsaren …"
+      controller?.rebuild()
+    }
+    connectButton = ActionButton("Anslut läsare") { [weak controller] in controller?.connect() }
+    helpButton = ActionButton("Hjälp") { [weak controller] in controller?.help() }
+    helpButton.widthAnchor.constraint(equalToConstant: 100).isActive = true
+    bothButton = ActionButton("Kopiera båda numren", height: 34) { [weak controller] in
+      guard let controller, let values = controller.outputs else { return }
+      controller.copy("Eget passersystem (mR): \(values.0)\nHyresvärdens passersystem (eR): \(values.1)")
+    }
+    clearButton = ActionButton("Rensa", height: 34) { [weak controller] in
+      controller?.clearDisplayedResults()
+    }
+    bothButton.widthAnchor.constraint(equalToConstant: 176).isActive = true
+    clearButton.widthAnchor.constraint(equalToConstant: 100).isActive = true
+    clearButton.setAccessibilityHelp("Rensa visade nummer och senast kopierat nummer från den här appen.")
+    first = ResultView(index: 0, controller: controller)
+    second = ResultView(index: 1, controller: controller)
+
+    logo.translatesAutoresizingMaskIntoConstraints = false
+    logo.imageScaling = .scaleProportionallyDown
+    logo.imageAlignment = .alignLeft
+    logo.heightAnchor.constraint(equalToConstant: 40).isActive = true
+    logo.widthAnchor.constraint(equalToConstant: 200).isActive = true
+    logo.setAccessibilityElement(false)
+    branding.addArrangedSubview(logo)
+    addFull(branding, organization)
+    addFull(branding, subtitle)
+    addFull(root, branding)
+
+    let titles = stack([label("Brickläsaren", size: 27, bold: true), mode, status], spacing: 4)
+    for field in [mode, status] { field.widthAnchor.constraint(equalTo: titles.widthAnchor).isActive = true }
+    titles.setContentHuggingPriority(.defaultLow, for: .horizontal)
+    let top = stack([titles, helpButton], horizontal: true, spacing: 20)
+    addFull(root, top)
+
+    let messages = stack([stage, instruction, hint], spacing: 7)
+    for field in [stage, instruction, hint] {
+      field.widthAnchor.constraint(equalTo: messages.widthAnchor).isActive = true
+    }
+    messages.setContentHuggingPriority(.defaultLow, for: .horizontal)
+    let actions = stack([readButton, cancelButton, connectButton], spacing: 8)
+    actions.widthAnchor.constraint(equalToConstant: 200).isActive = true
+    for button in actions.arrangedSubviews {
+      button.widthAnchor.constraint(equalTo: actions.widthAnchor).isActive = true
+    }
+    instructionPanel = cardPanel(stack([messages, actions], horizontal: true, spacing: 20), color: .white)
+    addFull(root, instructionPanel)
+
+    let resultTitle = label("Bricknummer", size: 14, bold: true)
+    resultTitle.setContentHuggingPriority(.defaultLow, for: .horizontal)
+    addFull(root, stack([resultTitle, bothButton, clearButton], horizontal: true, spacing: 8))
+    let results = stack([first.panel, second.panel], horizontal: true, spacing: 14)
+    results.distribution = .fillEqually
+    addFull(root, results)
+    addFull(root, notice)
+    addFull(root, footer)
+  }
+
+  func clearNumbers() {
+    first.clear()
+    second.clear()
+    bothButton.isEnabled = false
+    clearButton.isEnabled = false
+  }
+  func update(_ c: AppController) {
+    let theme = c.theme
+    logo.image = c.visualCache.logo(c.store, settings: c.appearance)
+    logo.isHidden = logo.image == nil
+    organization.stringValue = c.appearance.Organization
+    organization.textColor = theme.text
+    organization.isHidden = organization.stringValue.isEmpty
+    subtitle.stringValue = c.appearance.Subtitle
+    subtitle.isHidden = subtitle.stringValue.isEmpty
+    branding.isHidden = logo.isHidden && organization.isHidden && subtitle.isHidden
+    mode.stringValue = c.preference?.Mode.title ?? "Välj passersystem vid första starten"
+    status.stringValue = c.connection
+    status.textColor = c.warning ? .systemBrown : Theme.muted
+    stage.stringValue = c.stage
+    stage.textColor = c.warning ? .systemBrown : theme.text
+    instruction.stringValue = c.instruction
+    hint.stringValue = c.hint
+    instructionPanel.layer?.backgroundColor = (c.warning
+      ? NSColor(srgbRed: 1, green: 0.955, blue: 0.9, alpha: 1) : theme.light).cgColor
+    readButton.title = c.outputs == nil ? "Läs bricka" : "Läs nästa bricka"
+    readButton.setAccessibilityLabel(readButton.title)
+    readButton.isEnabled = !c.busy && !c.reconnectPending && c.preference != nil && c.info?.ready == true && c.usbMonitor?.timedOut != true
+    cancelButton.isHidden = !c.busy || c.token == nil
+    connectButton.isHidden = c.info != nil || c.busy
+    connectButton.isEnabled = c.usbMonitor?.timedOut != true
+    helpButton.isEnabled = !c.busy
+    let mode = c.preference?.Mode ?? .combo
+    let canCopy = !c.busy && !c.reconnectPending && c.info?.ready == true && c.usbMonitor?.timedOut != true
+    var title = "Eget passersystem", detail = "mR · MIFARE", copy = "Kopiera till eget system"
+    var secondTitle = "Hyresvärdens passersystem", secondDetail = "eR · EM", secondCopy = "Kopiera till hyresvärden"
+    switch mode {
+    case .combo: break
+    case .rco:
+      title = "Kort ID"; detail = "9 siffror · \(c.preference?.RcoChip == "E" ? "EM" : "MIFARE")"
+      copy = "Kopiera kort ID"; secondTitle = "Långt ID"; secondDetail = "10 siffror"; secondCopy = "Kopiera långt ID"
+    case .axema: title = "Axema VAKA"; detail = "EM · 14 siffror"; copy = "Kopiera VAKA-numret"
+    case .bewator: title = "Bewator 2010 / Omnis"; detail = "EM · 13 siffror"; copy = "Kopiera Bewator-numret"
+    }
+    first.update(title: title, detail: detail, value: c.outputs?.0, copy: copy, enabled: canCopy, theme: theme)
+    second.update(title: secondTitle, detail: secondDetail, value: c.outputs?.1, copy: secondCopy, enabled: canCopy, theme: theme)
+    second.panel.isHidden = mode != .combo && mode != .rco
+    bothButton.isHidden = mode != .combo
+    bothButton.isEnabled = canCopy && c.outputs != nil
+    clearButton.isEnabled = !c.busy && c.outputs != nil
+    notice.stringValue = c.notice
+    notice.textColor = theme.text
+    notice.isHidden = c.notice.isEmpty
+    footer.stringValue = mode == .combo ? "Använd samma bricka i båda stegen.  ⌘R Läs · ⌘1 / 2 Kopiera" : "Läs en bricka i taget.  ⌘R Läs · ⌘1 Kopiera"
+    for button in [readButton, cancelButton, connectButton, helpButton, bothButton, clearButton] {
+      button.theme = theme
+      button.needsDisplay = true
+    }
+    if !c.preview && c.window.isVisible && lastInstruction != c.instruction {
+      NSAccessibility.post(element: instruction, notification: .valueChanged)
+    }
+    lastInstruction = c.instruction
+  }
+}
+
 final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
   let store: Store
   var window: NSWindow!
   var preference: FormatPreference?
   var appearance: AppearanceSettings
-  var theme: Theme { Theme(appearance.AccentHex) }
+  let visualCache = AppearanceCache()
+  var theme: Theme { visualCache.theme(appearance.AccentHex) }
+  var readerView: ReaderView?
   let worker = DispatchQueue(label: "se.tobtech.bricklasaren.reader", qos: .userInitiated)
   // Engine and all transport/config mutations are confined to worker. UI uses ReaderInfo snapshots.
   var workflow: WorkflowSettings
   var connectionTimer: Timer?, wakeObserver: NSObjectProtocol?, lastUSB: USBState?
+  var usbMonitor: USBMonitor?
   var reconnectPending = false
   var updateChecking = false
   var startupUpdatePending = false
@@ -220,10 +434,10 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
   }
   func makeWindow() {
     window = NSWindow(
-      contentRect: NSRect(x: 0, y: 0, width: 900, height: 720),
+      contentRect: NSRect(x: 0, y: 0, width: 900, height: 650),
       styleMask: [.titled, .closable, .miniaturizable, .resizable], backing: .buffered, defer: false
     )
-    window.title = "Brickläsaren · 3.5.2 · macOS"
+    window.title = "Brickläsaren · 3.6.0 · macOS"
     window.isReleasedWhenClosed = false
     window.minSize = NSSize(width: 800, height: 600)
     window.backgroundColor = Theme.paper
@@ -240,6 +454,7 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
       return .terminateCancel
     }
     clearResults()
+    usbMonitor?.stop()
     return .terminateNow
   }
   func windowShouldClose(_ sender: NSWindow) -> Bool {
@@ -250,6 +465,7 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
       return false
     }
     clearResults()
+    usbMonitor?.stop()
     return true
   }
   func buildMenu() {
@@ -282,7 +498,7 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
   }
   @objc func aboutApp() {
     let a = NSAlert()
-    a.messageText = "Brickläsaren 3.5.2 för macOS"
+    a.messageText = "Brickläsaren 3.6.0 för macOS"
     a.informativeText =
       "Tobtech\n\nGratis för privat bruk. Kommersiellt bruk kräver en betald licens."
     a.addButton(withTitle: "Stäng")
@@ -295,6 +511,7 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
   }
   func clearResults() {
     outputs = nil
+    readerView?.clearNumbers()
     if let lastCopied, NSPasteboard.general.string(forType: .string) == lastCopied {
       NSPasteboard.general.clearContents()
     }
@@ -307,139 +524,26 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
     b.isEnabled = enabled
     return b
   }
+  // The name is retained for callers; normal state changes update the existing controls.
   func rebuild() {
     guard window != nil else { return }
-    let root = stack(spacing: 18)
-    if let data = AppearanceFiles.loadedLogo(store, appearance), let image = NSImage(data: data) {
-      let v = NSImageView()
-      v.image = image
-      v.imageScaling = .scaleProportionallyDown
-      v.translatesAutoresizingMaskIntoConstraints = false
-      v.heightAnchor.constraint(equalToConstant: 48).isActive = true
-      v.widthAnchor.constraint(equalToConstant: 220).isActive = true
-      root.addArrangedSubview(v)
+    if readerView == nil {
+      let view = ReaderView(self)
+      readerView = view
+      setRoot(window, view.root)
+      window.initialFirstResponder = view.readButton
     }
-    if !appearance.Organization.isEmpty {
-      root.addArrangedSubview(
-        label(appearance.Organization, size: 15, bold: true, color: theme.text))
-    }
-    if !appearance.Subtitle.isEmpty {
-      root.addArrangedSubview(label(appearance.Subtitle, size: 12, color: Theme.muted))
-    }
-    let titles = stack(
-      [
-        label("Brickläsaren", size: 30, bold: true),
-        label(preference?.Mode.title ?? "Välj passersystem vid första starten", color: Theme.muted),
-      ], spacing: 8)
-    let top = stack(
-      [titles, button("Hjälp", enabled: !busy) { [weak self] in self?.help() }], horizontal: true)
-    top.distribution = .fill
-    addFull(root, top)
-    titles.setContentHuggingPriority(.defaultLow, for: .horizontal)
-    addFull(root, label(connection, size: 13, color: Theme.muted))
-    let messages = stack(
-      [
-        label(stage, size: 12, bold: true, color: warning ? .systemBrown : theme.text),
-        label(instruction, size: 28, bold: true), label(hint, color: Theme.muted),
-      ], spacing: 12)
-    for v in messages.arrangedSubviews {
-      v.widthAnchor.constraint(equalTo: messages.widthAnchor).isActive = true
-    }
-    addFull(
-      root,
-      cardPanel(
-        messages,
-        color: warning ? NSColor(srgbRed: 1, green: 0.945, blue: 0.867, alpha: 1) : theme.light))
-    let actions = stack(horizontal: true)
-    let read = button(
-      outputs == nil ? "Läs bricka" : "Läs nästa bricka", primary: true,
-      enabled: !busy && preference != nil && info?.ready == true
-    ) { [weak self] in self?.scan() }
-    read.widthAnchor.constraint(greaterThanOrEqualToConstant: 260).isActive = true
-    read.heightAnchor.constraint(greaterThanOrEqualToConstant: 52).isActive = true
-    actions.addArrangedSubview(read)
-    if busy && token != nil {
-      actions.addArrangedSubview(
-        button("Avbryt") { [weak self] in
-          self?.token?.cancel()
-          self?.notice = "Avbryter och återställer läsaren …"
-          self?.rebuild()
-        })
-    }
-    if info == nil && !busy {
-      actions.addArrangedSubview(button("Anslut läsare") { [weak self] in self?.connect() })
-    }
-    addFull(root, actions)
-    let mode = preference?.Mode ?? .combo
-    var leftTitle = "Eget passersystem"
-    var rightTitle = "Hyresvärdens passersystem"
-    var leftDetail = "mR · MIFARE"
-    var rightDetail = "eR · EM"
-    var leftCopy = "Kopiera till eget system"
-    var rightCopy = "Kopiera till hyresvärden"
-    if mode == .rco {
-      leftTitle = "Kort ID"
-      rightTitle = "Långt ID"
-      leftDetail = "9 siffror · \(preference?.RcoChip == "E" ? "EM":"MIFARE")"
-      rightDetail = "10 siffror"
-      leftCopy = "Kopiera kort ID"
-      rightCopy = "Kopiera långt ID"
-    }
-    if mode == .axema {
-      leftTitle = "Axema VAKA"
-      leftDetail = "EM · 14 siffror"
-      leftCopy = "Kopiera VAKA-numret"
-    }
-    if mode == .bewator {
-      leftTitle = "Bewator 2010 / Omnis"
-      leftDetail = "EM · 13 siffror"
-      leftCopy = "Kopiera Bewator-numret"
-    }
-    let results = stack(horizontal: true, spacing: 16)
-    results.distribution = .fillEqually
-    results.addArrangedSubview(
-      resultCard(leftTitle, leftDetail, outputs?.0 ?? "—", leftCopy, index: 0))
-    if mode == .combo || mode == .rco {
-      results.addArrangedSubview(
-        resultCard(rightTitle, rightDetail, outputs?.1 ?? "—", rightCopy, index: 1))
-    }
-    addFull(root, results)
-    if mode == .combo {
-      root.addArrangedSubview(
-        button("Kopiera båda numren", enabled: outputs != nil && !busy && info?.ready == true) {
-          [weak self] in
-          guard let self, let values = self.outputs else { return }
-          self.copy(
-            "Eget passersystem (mR): \(values.0)\nHyresvärdens passersystem (eR): \(values.1)")
-        })
-    }
-    if !notice.isEmpty { addFull(root, label(notice, size: 13, color: theme.text)) }
-    addFull(
-      root,
-      label(
-        mode == .combo
-          ? "Använd samma bricka i båda stegen."
-          : "Läs en bricka i taget.", size: 12, color: Theme.muted))
-    setRoot(window, root)
+    readerView?.update(self)
   }
-  func resultCard(_ title: String, _ detail: String, _ value: String, _ copy: String, index: Int)
-    -> NSView
-  {
-    let number = label(value, size: 32, bold: true)
-    number.font = .monospacedDigitSystemFont(ofSize: 32, weight: .medium)
-    number.setAccessibilityLabel(index == 0 ? "Första ID-numret" : "Andra ID-numret")
-    let b = button(copy, enabled: outputs != nil && !busy && info?.ready == true) { [weak self] in
-      guard let self, let o = self.outputs else { return }
-      self.copy(index == 0 ? o.0 : o.1)
-    }
-    let body = stack(
-      [label(title, size: 15, bold: true), label(detail, size: 12, color: Theme.muted), number, b],
-      spacing: 14)
-    b.widthAnchor.constraint(equalTo: body.widthAnchor).isActive = true
-    return cardPanel(body, color: .white)
+  func clearDisplayedResults() {
+    guard !busy else { return }
+    clearResults()
+    notice = "Numren är rensade."
+    readyMessage()
+    rebuild()
   }
   func copy(_ text: String) {
-    guard !busy, info?.ready == true else { return }
+    guard !busy, !reconnectPending, info?.ready == true, usbMonitor?.timedOut != true else { return }
     NSPasteboard.general.clearContents()
     NSPasteboard.general.setString(text, forType: .string)
     lastCopied = text
@@ -448,6 +552,14 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
   }
   func readyMessage() {
     warning = false
+    if usbMonitor?.timedOut == true {
+      connection = "Läsarens anslutning behöver kontrolleras"
+      stage = "KONTROLLERAR ANSLUTNINGEN"
+      instruction = "Väntar på kontakt med läsaren"
+      hint = "Numren är rensade. Låt USB-kabeln sitta i medan anslutningen kontrolleras."
+      warning = true
+      return
+    }
     if let info {
       connection = "Läsaren är ansluten"
       if info.pending {
@@ -460,6 +572,10 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
         instruction = "Kontrollera läsarprofilen"
         hint = info.profile
         warning = true
+      } else if outputs != nil {
+        stage = "KLART"
+        instruction = "Läsningen är klar"
+        hint = "Kopiera önskat nummer eller läs nästa bricka."
       } else {
         stage = "KLAR ATT BÖRJA"
         instruction = "Klicka på Läs bricka"
@@ -474,10 +590,13 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
     }
   }
   func connect() {
-    guard !busy else { return }
+    guard !busy, usbMonitor?.timedOut != true else { return }
+    reconnectPending = false
     clearResults()
+    usbMonitor?.invalidate()
     busy = true
     info = nil
+    connection = "Ansluter läsaren …"
     notice = ""
     stage = "FÖRBEREDER"
     instruction = "Förbereder läsaren automatiskt"
@@ -490,21 +609,24 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
       do {
         let reader = try MacConnector.connect(store: self.store) { [weak self] message in
           DispatchQueue.main.async {
-            self?.hint = message
-            self?.rebuild()
+            guard let self, !self.reconnectPending, self.usbMonitor?.timedOut != true else { return }
+            self.hint = message
+            self.rebuild()
           }
         }
         self.engine = reader
         let info = reader.info
-        DispatchQueue.main.async {
-          self.info = info
-          self.busy = false
-          self.readyMessage()
-          self.rebuild()
-          self.checkStartupUpdates()
-        }
+        DispatchQueue.main.async { self.completeConnection(info) }
       } catch { self.finishError(error, info: nil) }
     }
+  }
+  func completeConnection(_ info: ReaderInfo) {
+    // A wake/disconnect/monitor deadline can supersede an otherwise successful reader job.
+    self.info = reconnectPending || usbMonitor?.timedOut == true ? nil : info
+    busy = false
+    readyMessage()
+    rebuild()
+    checkStartupUpdates()
   }
   func finishError(_ error: Error, info: ReaderInfo?) {
     let code = (error as? ReaderError)?.code ?? "FILE_IO"
@@ -512,7 +634,7 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
       (error as? ReaderError)?.message
       ?? "Inställningen kunde inte läsas eller sparas. Kontrollera filbehörigheterna."
     // Only bounded codes and app/platform versions are persisted, never exception payloads/APDUs/card IDs.
-    try? store.writeData("senaste-fel.txt", Data("Brickläsaren 3.5.2 macOS\nKod: \(code)\n".utf8))
+    try? store.writeData("senaste-fel.txt", Data("Brickläsaren 3.6.0 macOS\nKod: \(code)\n".utf8))
     DispatchQueue.main.async {
       self.info = self.reconnectPending ? nil : info
       self.latestErrorCode = code
@@ -526,7 +648,7 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
     }
   }
   func scan(reference: Bool = false) {
-    guard !busy, let preference, info != nil else { return }
+    guard !busy, !reconnectPending, let preference, info != nil, usbMonitor?.timedOut != true else { return }
     clearResults()
     let cancellation = CancelToken()
     token = cancellation
@@ -538,29 +660,45 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
       do {
         let result = try engine.scan(preference, reference: reference, token: cancellation) {
           [weak self] phase in
-          DispatchQueue.main.async { self?.progress(phase, reference: reference) }
+          DispatchQueue.main.async {
+            guard let self, self.token === cancellation, !cancellation.cancelled else { return }
+            self.progress(phase, reference: reference)
+          }
         }
         let values = reference ? nil : try result.outputs(preference)
         let info = engine.info
         DispatchQueue.main.async {
-          self.busy = false
-          self.token = nil
-          self.info = info
-          self.outputs = self.reconnectPending ? nil : values
-          self.readyMessage()
-          self.notice =
-            reference
-            ? "Kontrollen är godkänd. Den verifierade profilen används nu."
-            : "Läsningen är klar. Kopiera önskat nummer."
-          self.rebuild()
-          if !reference, !self.reconnectPending, info.ready, let values {
-            self.cue(3)
-            if let text = self.workflow.copyValue(values, combo: preference.Mode == .combo) {
-              self.copy(text)
-            }
-          }
+          self.completeScan(values, info: info, preference: preference, reference: reference, cancellation: cancellation)
         }
       } catch { self.finishError(error, info: engine.info) }
+    }
+  }
+  func completeScan(_ values: (String, String)?, info: ReaderInfo, preference: FormatPreference,
+                    reference: Bool, cancellation: CancelToken) {
+    // Cancellation or disconnect can win after the worker finishes but before this UI callback.
+    guard token === cancellation else { return }
+    busy = false
+    token = nil
+    let unavailable = reconnectPending || usbMonitor?.timedOut == true
+    self.info = unavailable ? nil : info
+    let incomplete = !reference && !info.ready
+    let discard = cancellation.cancelled || unavailable || incomplete
+    outputs = discard ? nil : values
+    readyMessage()
+    if cancellation.cancelled {
+      notice = "Läsningen avbröts. Inga nummer visas."
+    } else if unavailable {
+      notice = "Anslutningen ändrades. Läs brickan igen när läsaren är redo."
+    } else if incomplete {
+      notice = "Läsningen kunde inte avslutas. Inga nummer visas."
+    } else {
+      notice = reference ? "Kontrollen är godkänd. Den verifierade profilen används nu."
+        : "Läsningen är klar. Kopiera önskat nummer."
+    }
+    rebuild()
+    if !discard, !reference, info.ready, let values = outputs {
+      cue(3)
+      if let text = workflow.copyValue(values, combo: preference.Mode == .combo) { copy(text) }
     }
   }
   func progress(_ phase: String, reference: Bool) {

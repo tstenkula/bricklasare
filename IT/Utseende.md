@@ -14,6 +14,6 @@ Inställningen ligger i `utseende.json` och logotypen i `branding/` under `%LOCA
 
 Utseendet och logotypen ingår inte i Git eller exporterade receptionspaket. Välj dem separat på en ny dator eller för ett annat Windows-konto. En saknad eller skadad lokal logotyp ska inte hindra att programmet startar.
 
-Färgen ändrar inte hur kortnummer läses, formateras eller kopieras. Inga uppdateringar eller någon kodsignering ingår i denna version.
+Färgen ändrar inte hur kortnummer läses, formateras eller kopieras. Inställningar för uppdateringar finns separat under **Hjälp → IT-inställningar**.
 
 Från version 3.4 är standardfärgen marinblå `#003B55`. En tidigare sparad färg ändras inte automatiskt. För att byta till marinblått utan att ta bort logotyp eller texter, välj **Marinblå** i färgtemalistan och spara. Använd **Återställ** bara när även namn och logotyp ska tas bort.

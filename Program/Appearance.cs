@@ -140,6 +140,32 @@ namespace Tobtech.OmnikeyRco
             catch (IOException) { return null; }
             catch (UnauthorizedAccessException) { return null; }
         }
+        // Keep the original for editing; the main window only retains a small display copy.
+        internal static Bitmap LoadDisplayLogo(string directory, AppearanceSettings settings, Size bounds)
+        {
+            if (bounds.Width < 1 || bounds.Height < 1) throw new ArgumentOutOfRangeException("bounds");
+            using (Bitmap source = LoadLogo(directory, settings))
+            {
+                if (source == null) return null;
+                double scale = Math.Min(1.0, Math.Min((double)bounds.Width / source.Width, (double)bounds.Height / source.Height));
+                int width = Math.Max(1, (int)Math.Round(source.Width * scale));
+                int height = Math.Max(1, (int)Math.Round(source.Height * scale));
+                Bitmap display = new Bitmap(width, height, PixelFormat.Format32bppPArgb);
+                try
+                {
+                    using (Graphics graphics = Graphics.FromImage(display))
+                    using (ImageAttributes attributes = new ImageAttributes())
+                    {
+                        attributes.SetWrapMode(System.Drawing.Drawing2D.WrapMode.TileFlipXY);
+                        graphics.CompositingMode = System.Drawing.Drawing2D.CompositingMode.SourceCopy;
+                        graphics.InterpolationMode = System.Drawing.Drawing2D.InterpolationMode.HighQualityBicubic;
+                        graphics.DrawImage(source, new Rectangle(0, 0, width, height), 0, 0, source.Width, source.Height, GraphicsUnit.Pixel, attributes);
+                    }
+                    return display;
+                }
+                catch { display.Dispose(); throw; }
+            }
+        }
         public static void Save(string directory, AppearanceSettings settings, Image logo)
         {
             Validate(settings);

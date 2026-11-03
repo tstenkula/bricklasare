@@ -1,4 +1,4 @@
-﻿BRICKLÄSAREN – 3.5.2
+﻿BRICKLÄSAREN – 3.6.0
 
 Starta med Starta-Bricklasaren.cmd.
 Första gången väljer du passersystem och klickar Spara och börja.
@@ -15,6 +15,8 @@ Bewator 2010/Omnis: EM, 13 siffror.
 2. Följ stegen i huvudfönstret. Lyft brickan när programmet ber om det.
 3. Kopiera önskat nummer med knappen vid resultatet.
 4. Välj Läs nästa bricka för att läsa ett nytt kort.
+Välj Rensa om du vill ta bort resultatet utan att börja en ny läsning.
+Programmet rensar bara sin egen senast kopierade text från urklippet.
 
 Programmet ställer automatiskt in läsaren så att kortnummer inte skrivs
 som tangenttryckningar i andra program. Inget nytt resultat läses av

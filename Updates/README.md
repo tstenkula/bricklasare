@@ -24,10 +24,12 @@ Detta är **paketverifiering**, inte Windows Authenticode eller Apple Developer 
 ## Släppa en version
 
 1. Höj versionsnumret på båda plattformarna och i Windows installationshjälp. Kör testerna och bygg Windows ZIP, Mac ZIP och DMG från samma verifierade källa. Skapa först en utgåva som utkast i `tstenkula/bricklasare`, ladda upp samtliga arkiv och kontrollsummor, verifiera innehållet och publicera sedan. Nya publicerade utgåvors filer och taggar är låsta genom GitHubs release immutability.
+
+   Signeringsverktyget kontrollerar lokalt att nyckeln motsvarar apparnas inbyggda publika nyckel, att version/kanal/tagg stämmer och att ZIP-filerna har rätt namn och versionsuppgifter. Befintlig kanalfil lämnas orörd om kontrollen misslyckas. Det ersätter inte kontrollen av de uppladdade filerna.
 2. Signera kanalfilen lokalt med `tools/release.py`. Exempel:
 
    ```sh
-   python3 tools/release.py --key /secure/path/update-signing.pem --channel preview --version 3.5.2 --tag v3.5.2-preview.1 --windows dist/Bricklasaren-3.5.2-Windows.zip --mac dist/Bricklasaren-3.5.2-macOS-AppleSilicon.zip --output Updates/preview.feed
+   python3 tools/release.py --key /secure/path/update-signing.pem --channel preview --version 3.6.0 --tag v3.6.0-preview.1 --windows dist/Bricklasaren-3.6.0-Windows.zip --mac dist/Bricklasaren-3.6.0-macOS-AppleSilicon.zip --output Updates/preview.feed
    ```
 
 3. Kontrollera att arkivens hash stämmer mot GitHub, uppdatera källfilernas kontrollsummor och skicka kanalfilen genom granskning till `main`. Flytta inte en befintlig release till annat innehåll efter publicering.

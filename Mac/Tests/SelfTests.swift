@@ -241,6 +241,10 @@ struct SelfTests {
     try check(try AppearanceFiles.logoData(store.url("sample.png")) == png, "Validated PNG logo")
     let branded = try AppearanceFiles.save(store, AppearanceSettings(), logo: png)
     try check(store.exists("branding/" + branded.LogoFile), "Owned logo copied locally")
+    let cache = AppearanceCache()
+    let cachedImage = cache.logo(store, settings: branded)
+    try check(cachedImage != nil && cache.logo(store, settings: branded) === cachedImage, "Validated logo is decoded once and reused")
+    try check(cache.logo(store, settings: AppearanceSettings()) == nil, "Clearing branding invalidates the logo cache")
     try rejects("Malformed logo does not replace prior") {
       _ = try AppearanceFiles.save(store, AppearanceSettings(), logo: Data("invalid".utf8))
     }
@@ -282,6 +286,7 @@ struct SelfTests {
     )
   }
   static func uiTests(_ store: Store) throws {
+    try UIWorkflowTests.run(store)
     let controller = AppController(store: store, preview: true)
     controller.makeWindow()
     controller.preference = FormatPreference(Mode: .combo, RcoChip: "M")
@@ -401,19 +406,45 @@ struct SelfTests {
     c.rebuild()
     try snapshot(c.window, to: folder.appendingPathComponent("marinbla-klar.png"))
     c.outputs = ("025800772", "051501029")
+    c.readyMessage()
     c.notice = "Konstruerade testnummer – inga verkliga brickor."
     c.rebuild()
     try snapshot(c.window, to: folder.appendingPathComponent("marinbla-resultat.png"))
+    c.window.setFrame(NSRect(origin: c.window.frame.origin, size: c.window.minSize), display: true)
+    try snapshot(c.window, to: folder.appendingPathComponent("minimum-resultat.png"))
     c.outputs = nil
+    c.busy = true
+    c.token = CancelToken()
+    c.progress("place-m", reference: false)
+    try snapshot(c.window, to: folder.appendingPathComponent("minimum-steg-1.png"))
+    c.progress("place-e", reference: false)
+    try snapshot(c.window, to: folder.appendingPathComponent("minimum-steg-2.png"))
+    c.busy = false
+    c.token = nil
+    c.window.setContentSize(NSSize(width: 900, height: 650))
     c.info = nil
     c.readyMessage()
     c.rebuild()
     try snapshot(c.window, to: folder.appendingPathComponent("ingen-lasare.png"))
     for mode in [AccessMode.rco, .axema, .bewator] {
       c.preference = FormatPreference(Mode: mode, RcoChip: "M")
+      c.info = ReaderInfo(board: "Simulated", id: "", firmware: "", profile: "Standardformat", pending: false, ready: true)
+      c.outputs = mode == .rco ? ("025800772", "0123456789")
+        : mode == .axema ? ("12345678901234", "") : ("1234567890123", "")
+      c.readyMessage()
       c.rebuild()
       try snapshot(c.window, to: folder.appendingPathComponent(mode.rawValue + ".png"))
     }
+    c.clearResults()
+    c.info = nil
+    c.readyMessage()
+    c.appearance.Organization = String(repeating: "Långt namn ", count: 8)
+    c.appearance.Subtitle = String(repeating: "Valfri underrubrik. ", count: 6)
+    c.window.setFrame(NSRect(origin: c.window.frame.origin, size: c.window.minSize), display: true)
+    c.instruction = "Anslutningen behöver kontrolleras"
+    c.hint = "Kontrollera USB-kabeln och godkänn tillbehöret om macOS frågar. Låt läsaren vara inkopplad och välj sedan Anslut läsare. Om problemet kvarstår kan du spara en felrapport under Hjälp."
+    c.rebuild()
+    try snapshot(c.window, to: folder.appendingPathComponent("minimum-lang-branding.png"))
     let f = FormatEditor(nil) { _ in }
     try snapshot(f.dialog, to: folder.appendingPathComponent("forsta-start.png"))
     f.dialog.close()
@@ -427,6 +458,6 @@ struct SelfTests {
     try snapshot(workflow, to: folder.appendingPathComponent("arbetsflode.png"))
     workflow.close()
     c.window.close()
-    print("Rendered 10 interface images with synthetic data; no hardware accessed.")
+    print("Rendered 14 interface images with synthetic data; no hardware accessed.")
   }
 }

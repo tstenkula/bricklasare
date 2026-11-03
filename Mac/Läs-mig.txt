@@ -1,4 +1,4 @@
-Brickläsaren 3.5.2 för Mac · Apple Silicon
+Brickläsaren 3.6.0 för Mac · Apple Silicon
 
 Kräver macOS 13 eller senare och en OMNIKEY 5427 CK eller 5427 CK Gen2.
 Intel-Mac stöds inte.
@@ -10,6 +10,8 @@ Intel-Mac stöds inte.
 
 I läget RCO – MIFARE + EM används samma bricka i båda stegen.
 Numren visas först efter att läsningen och återställningen är färdiga.
+Välj Rensa för att ta bort resultatet utan att börja en ny läsning.
+Programmet rensar bara sin egen senast kopierade text från urklippet.
 Ingen registrering av enskilda brickor eller referensbricka krävs för vanlig läsning.
 
 Programmet förbereder smartkortsläget så att läsaren inte skriver till andra fönster.

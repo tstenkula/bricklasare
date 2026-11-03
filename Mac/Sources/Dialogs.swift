@@ -2,8 +2,10 @@ import AppKit
 import UniformTypeIdentifiers
 
 final class FormatEditor {
-  let dialog = Dialog("Välj passersystem", width: 660, height: 600)
+  let dialog = Dialog("Välj passersystem", width: 660, height: 390)
   let choices = NSPopUpButton(), chip = NSPopUpButton()
+  let detail = label("", size: 13, color: Theme.muted)
+  let chipSection = stack(spacing: 8)
   var selected: FormatPreference? {
     guard choices.indexOfSelectedItem > 0 else { return nil }
     return FormatPreference(
@@ -13,21 +15,22 @@ final class FormatEditor {
   init(_ current: FormatPreference?, save: @escaping (FormatPreference) throws -> Void) {
     choices.addItems(withTitles: ["Välj passersystem …"] + AccessMode.allCases.map(\.title))
     chip.addItems(withTitles: ["MIFARE", "EM"])
+    choices.setAccessibilityLabel("Passersystem")
+    chip.setAccessibilityLabel("RCO-teknik")
     if let current {
       choices.selectItem(at: AccessMode.allCases.firstIndex(of: current.Mode)! + 1)
       chip.selectItem(at: current.RcoChip == "M" ? 0 : 1)
     }
+    chipSection.addArrangedSubview(label("Teknik för kort och långt RCO-ID", size: 13, bold: true))
+    chipSection.addArrangedSubview(chip)
     let root = stack(
       [
         label("Välj passersystem", size: 26, bold: true),
         label(
           "Valet sparas för ditt Mac-konto och används nästa gång programmet öppnas.",
-          color: Theme.muted), choices,
-        label("Teknik vid RCO – kort/lång ID-kod", size: 13, bold: true), chip,
+          color: Theme.muted), choices, detail, chipSection,
       ], spacing: 16)
-    for mode in AccessMode.allCases {
-      addFull(root, label(mode.title + "\n" + mode.detail, size: 13))
-    }
+    for view in [choices, detail] { view.widthAnchor.constraint(equalTo: root.widthAnchor).isActive = true }
     let saveButton = ActionButton("Spara och börja", primary: true) { [weak self] in
       guard let self, let preference = self.selected else { return }
       do {
@@ -38,17 +41,23 @@ final class FormatEditor {
     saveButton.isEnabled = selected != nil
     let observer = SelectionObserver { [weak self, weak saveButton] in
       saveButton?.isEnabled = self?.selected != nil
-      self?.chip.isEnabled = self?.selected?.Mode == .rco
+      self?.updateSelection()
     }
     choices.target = observer
     choices.action = #selector(SelectionObserver.changed)
     dialog.retained = observer
-    chip.isEnabled = selected?.Mode == .rco
+    updateSelection()
     root.addArrangedSubview(
       stack(
         [saveButton, ActionButton("Avbryt") { [weak self] in self?.dialog.finish(false) }],
         horizontal: true))
     setRoot(dialog, root)
+    dialog.initialFirstResponder = choices
+  }
+  func updateSelection() {
+    detail.stringValue = selected?.Mode.detail ?? "Välj det passersystem som numret ska användas i."
+    chipSection.isHidden = selected?.Mode != .rco
+    chip.isEnabled = selected?.Mode == .rco
   }
 }
 final class SelectionObserver: NSObject {
@@ -58,17 +67,22 @@ final class SelectionObserver: NSObject {
 }
 
 final class AppearanceEditor: NSObject, NSTextFieldDelegate {
-  let dialog = Dialog("Utseende – färg och logotyp", width: 680, height: 680)
+  let dialog = Dialog("Utseende – färg och logotyp", width: 680, height: 620)
   let color = NSTextField(), organization = NSTextField(), subtitle = NSTextField(),
     preview = NSStackView()
   let preset = NSPopUpButton(), logoLabel = label("Ingen logotyp", size: 12, color: Theme.muted)
-  var logo: Data?, settings: AppearanceSettings
+  let previewLogo = NSImageView(), previewName = label("", size: 20, bold: true),
+    previewSubtitle = label("", size: 12), previewButton = ActionButton("Läs bricka", primary: true) {}
+  var previewPanel: NSView?
+  var logo: Data? { didSet { previewLogo.image = logo.flatMap(AppearanceFiles.thumbnail) } }
+  var settings: AppearanceSettings
   let store: Store
   init(store: Store, settings: AppearanceSettings, save: @escaping (AppearanceSettings) -> Void) {
     self.store = store
     self.settings = settings
     self.logo = AppearanceFiles.loadedLogo(store, settings)
     super.init()
+    previewLogo.image = logo.flatMap(AppearanceFiles.thumbnail)
     color.stringValue = settings.AccentHex
     organization.stringValue = settings.Organization
     subtitle.stringValue = settings.Subtitle
@@ -77,13 +91,16 @@ final class AppearanceEditor: NSObject, NSTextFieldDelegate {
     ] {
       field.delegate = self
       field.setAccessibilityLabel(name)
+      field.font = .systemFont(ofSize: 14)
+      field.heightAnchor.constraint(greaterThanOrEqualToConstant: 24).isActive = true
     }
     preset.addItems(withTitles: ["Välj färg …", "Marinblå", "Grön", "Lila"])
+    preset.setAccessibilityLabel("Färgtema")
     preset.target = self
     preset.action = #selector(selectPreset)
     let root = stack(
       [
-        label("Gör programmet till ert", size: 26, bold: true),
+        label("Färg och logotyp", size: 26, bold: true),
         label("Färg och logotyp sparas lokalt på den här datorn.", color: Theme.muted),
         stack([preset, color], horizontal: true),
         label("Verksamhetens namn (valfritt)", size: 13, bold: true), organization,
@@ -156,31 +173,35 @@ final class AppearanceEditor: NSObject, NSTextFieldDelegate {
     }
   }
   func updatePreview() {
-    for view in preview.arrangedSubviews {
-      preview.removeArrangedSubview(view)
-      view.removeFromSuperview()
+    if previewPanel == nil {
+      previewLogo.translatesAutoresizingMaskIntoConstraints = false
+      previewLogo.imageScaling = .scaleProportionallyDown
+      previewLogo.imageAlignment = .alignLeft
+      previewLogo.heightAnchor.constraint(equalToConstant: 38).isActive = true
+      previewLogo.widthAnchor.constraint(equalToConstant: 200).isActive = true
+      previewLogo.setAccessibilityElement(false)
+      previewButton.keyEquivalent = ""
+      previewButton.setAccessibilityLabel("Förhandsvisning av läsknapp")
+      let body = stack([previewLogo, previewName, previewSubtitle, previewButton], spacing: 8)
+      for field in [previewName, previewSubtitle] { field.widthAnchor.constraint(equalTo: body.widthAnchor).isActive = true }
+      let panel = cardPanel(body, color: .white, padding: 16)
+      previewPanel = panel
+      addFull(preview, panel)
     }
     logoLabel.stringValue = logo == nil ? "Ingen logotyp" : "Logotyp vald · PNG"
     let theme = Theme(color.stringValue)
-    let body = stack(spacing: 8)
-    if let logo, let image = NSImage(data: logo) {
-      let v = NSImageView()
-      v.image = image
-      v.imageScaling = .scaleProportionallyDown
-      v.heightAnchor.constraint(equalToConstant: 38).isActive = true
-      v.widthAnchor.constraint(equalToConstant: 200).isActive = true
-      body.addArrangedSubview(v)
-    }
-    body.addArrangedSubview(
-      label(
-        organization.stringValue.isEmpty ? "Brickläsaren" : organization.stringValue, size: 20,
-        bold: true, color: theme.text))
-    if !subtitle.stringValue.isEmpty {
-      body.addArrangedSubview(label(subtitle.stringValue, size: 12))
-    }
-    body.addArrangedSubview(ActionButton("Läs bricka", primary: true, theme: theme) {})
-    addFull(preview, cardPanel(body, color: theme.light, padding: 16))
+    previewLogo.isHidden = previewLogo.image == nil
+    previewName.stringValue = organization.stringValue.isEmpty ? "Brickläsaren" : organization.stringValue
+    previewName.textColor = theme.text
+    previewSubtitle.stringValue = subtitle.stringValue
+    previewSubtitle.isHidden = subtitle.stringValue.isEmpty
+    previewButton.theme = theme
+    previewButton.needsDisplay = true
+    previewPanel?.layer?.backgroundColor = theme.light.cgColor
+    let colors = ["#003B55", "#227054", "#67509B"]
+    preset.selectItem(at: colors.firstIndex(of: color.stringValue.uppercased()).map { $0 + 1 } ?? 0)
   }
+
 }
 final class ReferenceEditor {
   let dialog = Dialog("Ställ in referensbricka", width: 640, height: 530)
@@ -246,7 +267,7 @@ extension AppController {
     _ = editor.dialog.run(relativeTo: window)
   }
   func help() {
-    let d = Dialog("Hjälp", width: 650, height: 590)
+    let d = Dialog("Hjälp", width: 720, height: 460)
     let root = stack(
       [
         label("Hjälp med Brickläsaren", size: 26, bold: true),
@@ -276,8 +297,13 @@ extension AppController {
       ("Om och licens", { [weak self] in self?.aboutApp() }),
       ("IT-inställningar", { [weak self] in self?.itSettings() }),
     ]
-    for (title, action) in actions {
-      addFull(root, button(title, action))
+    for index in stride(from: 0, to: actions.count, by: 2) {
+      let row = stack(horizontal: true)
+      row.distribution = .fillEqually
+      for (title, action) in actions[index..<min(index + 2, actions.count)] {
+        row.addArrangedSubview(button(title, action))
+      }
+      addFull(root, row)
     }
     addFull(
       root,
@@ -416,7 +442,7 @@ extension AppController {
     guard let url = saveURL("Bricklasaren-felrapport.txt", type: .plainText) else { return }
     do {
       let report =
-        "Brickläsaren 3.5.2 · macOS · Apple Silicon\nmacOS: \(ProcessInfo.processInfo.operatingSystemVersionString)\nFelkod: \(latestErrorCode.isEmpty ? "Ingen i denna session":latestErrorCode)\nLäsare ansluten: \(info == nil ? "Nej":"Ja")\nÅterställning väntar: \(info?.pending == true ? "Ja":"Nej")\nRapporten innehåller inga kortnummer, läsar-ID, profiler eller användarsökvägar.\n"
+        "Brickläsaren 3.6.0 · macOS · Apple Silicon\nmacOS: \(ProcessInfo.processInfo.operatingSystemVersionString)\nFelkod: \(latestErrorCode.isEmpty ? "Ingen i denna session":latestErrorCode)\nLäsare ansluten: \(info == nil ? "Nej":"Ja")\nÅterställning väntar: \(info?.pending == true ? "Ja":"Nej")\nRapporten innehåller inga kortnummer, läsar-ID, profiler eller användarsökvägar.\n"
       try Data(report.utf8).write(to: url, options: .atomic)
       notice = "Felrapporten är sparad."
       rebuild()
@@ -444,9 +470,9 @@ extension AppController {
         let info = reader.info
         DispatchQueue.main.async {
           self.busy = false
-          self.info = info
+          self.info = self.reconnectPending || self.usbMonitor?.timedOut == true ? nil : info
           self.readyMessage()
-          self.notice = success
+          self.notice = self.info == nil ? "Anslutningen behöver kontrolleras på nytt." : success
           self.rebuild()
         }
       } catch { self.finishError(error, info: reader.info) }
