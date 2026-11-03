@@ -50,3 +50,6 @@ try {
     Assert-Installer 'Final installer requires original signed envelope' $false
     Write-Host ('PASS: ' + $script:checks + ' installer security checks; no package code executed.')
 } finally { Remove-Item -LiteralPath $temp -Recurse -Force }
+# The final negative test intentionally leaves the child exit code at 1.
+# Report this script's successful assertions instead of propagating that code to CI.
+exit 0
