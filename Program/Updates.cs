@@ -18,6 +18,8 @@
         public string Sha256 { get; set; }
         public long Size { get; set; }
         public string Notes { get; set; }
+        internal byte[] SignedFeed;
+        internal string Channel;
     }
     internal sealed class UpdateFeed
     {
@@ -28,7 +30,7 @@
     }
     internal static class Updates
     {
-        internal const string Current = "3.5.1";
+        internal const string Current = "3.5.2";
         internal const string PublicKey = "<RSAKeyValue><Modulus>n8JTA0cbbRrraGNb11fX4Dyanoa8S9TzTBGl8Edfagx743HROUj9lDCwJvuVF6cNpH4mB2dN33O+XfYKZMrUaJ0K/3Q9gmPLqedlvbpuHWlEaeUzekdT4Npo7EZpwo+Cwcxjlmlahgoll1MkjEu8QERzAQEeuTB4vZCsKdXdYcRlKAQuPEKqCWkiH49prMDvVdqUUYLl2TPLcHPD8MDdkbFh/glWJDTRB1No++PCUU8PVG80X94BnMe1E/+LLyTjxaNYVSsIFZlD9XX3eup7t/UTKUk9RC1u8WY23l74ccXwy71lirntfOFW6MdK4kFsIGOk+2PF/QGwoIcpwfhSt7+Id0y85VGEqe002CngsfxUQ7BkAAAB2+D4vPcU3FBLkleYkG5B+WXasbCslTGFXG+hnFpTU2R5XQECRJ2UXjuJN/lDaw8AE7dwUTTfibfYGs9mAUZ6nECBsL3OmpXtCK9ZyTHx2AWs+hvXP+7hzcluf12K2H4MveyyNcOFSNed</Modulus><Exponent>AQAB</Exponent></RSAKeyValue>";
         internal const string Unavailable = "Det gick inte att söka efter uppdateringar. Kontrollera internetanslutningen och försök igen senare. Du kan fortsätta använda Brickläsaren.";
         internal static Version ParseVersion(string value)
@@ -51,7 +53,7 @@
             UpdateFeed feed = new JavaScriptSerializer { MaxJsonLength = 65536 }.Deserialize<UpdateFeed>(Encoding.UTF8.GetString(payload));
             if (feed == null || feed.Schema != 1 || feed.Channel != channel) throw new InvalidDataException();
             UpdateAsset asset = feed.Windows;
-            if (asset != null) ValidateAsset(asset);
+            if (asset != null) { ValidateAsset(asset); asset.SignedFeed = (byte[])bytes.Clone(); asset.Channel = channel; }
             return asset;
         }
         internal static void ValidateAsset(UpdateAsset asset)
@@ -83,6 +85,15 @@
             throw new InvalidDataException("För många omdirigeringar.");
         }
         internal static UpdateAsset Check(string channel) { return Decode(Download("https://raw.githubusercontent.com/tstenkula/bricklasare/main/Updates/" + channel + ".feed", 65536), channel); }
+        internal static UpdateAsset Authenticate(UpdateAsset offered)
+        {
+            if (offered == null || offered.SignedFeed == null) throw new InvalidDataException("Signerad uppdateringsinformation saknas.");
+            UpdateAsset signed = Decode(offered.SignedFeed, offered.Channel);
+            if (signed == null || signed.Version != offered.Version || signed.Url != offered.Url || signed.Sha256 != offered.Sha256 || signed.Size != offered.Size)
+                throw new InvalidDataException("Uppdateringsinformationen har ändrats.");
+            if (ParseVersion(signed.Version) <= ParseVersion(Current)) throw new InvalidDataException("Uppdateringen är inte nyare än den installerade versionen.");
+            return signed;
+        }
         internal static bool Pending(string directory)
         {
             return Directory.GetFiles(directory, "aterstall-*.json").Length > 0 || Directory.GetFiles(directory, "usb-pending-*.json").Length > 0;
@@ -112,8 +123,9 @@
                 }
             }
         }
-        internal static string Stage(UpdateAsset asset)
+        internal static string Stage(UpdateAsset offered)
         {
+            UpdateAsset asset = Authenticate(offered);
             if (Pending(ReceptionFiles.DataPath)) throw new InvalidOperationException("Återställ läsaren innan programmet uppdateras.");
             if (Directory.Exists(Path.Combine(ReceptionFiles.PackagePath, ".git"))) throw new InvalidOperationException("Uppdatera utvecklingskopian via Git.");
             string target = Path.GetFullPath(ReceptionFiles.PackagePath).TrimEnd(Path.DirectorySeparatorChar);
@@ -127,8 +139,9 @@
                 string package = Path.Combine(directory, "package"); Extract(bytes, package);
                 foreach (string file in ReceptionFiles.RequiredPackageFiles) if (!File.Exists(Path.Combine(package, file))) throw new InvalidDataException("Paketet är ofullständigt.");
                 File.WriteAllBytes(Path.Combine(directory, "package.zip"), bytes);
+                File.WriteAllBytes(Path.Combine(directory, "release.feed"), asset.SignedFeed);
                 File.Copy(Path.Combine(ReceptionFiles.PackagePath, "Program", "Install-Update.ps1"), Path.Combine(directory,"Install-Update.ps1"));
-                var plan = new { Target = Path.GetFullPath(ReceptionFiles.PackagePath), Stage = package, ParentId = Process.GetCurrentProcess().Id, Data = ReceptionFiles.DataPath, Sha256 = asset.Sha256, Size = asset.Size, Version = asset.Version };
+                var plan = new { Target = Path.GetFullPath(ReceptionFiles.PackagePath), Stage = package, ParentId = Process.GetCurrentProcess().Id, Data = ReceptionFiles.DataPath, Channel = asset.Channel };
                 ReceptionFiles.WriteAtomic(Path.Combine(directory,"plan.json"), new JavaScriptSerializer().Serialize(plan));
                 return directory;
             } catch { try { Directory.Delete(directory,true); } catch { } throw; }

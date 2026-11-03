@@ -2,11 +2,16 @@ name: macOS self-tests
 
 on:
   push:
+    branches: [main]
   pull_request:
   workflow_dispatch:
 
 permissions:
   contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 jobs:
   macos:
@@ -21,11 +26,14 @@ jobs:
       - name: Verify repository checksums
         run: shasum -a 256 -c SHA256SUMS.txt
 
+      - name: Check native input boundaries with memory sanitizers
+        run: Mac/Tests/run-native-security-tests.sh
+
       - name: Build Apple Silicon app and DMG
         run: Mac/build.sh
 
       - name: Verify updater archive
-        run: dist/Bricklasaren.app/Contents/MacOS/Bricklasaren --verify-update-archive dist/Bricklasaren-3.5.1-macOS-AppleSilicon.zip
+        run: dist/Bricklasaren.app/Contents/MacOS/Bricklasaren --verify-update-archive dist/Bricklasaren-3.5.2-macOS-AppleSilicon.zip
 
       - name: Run offline application tests
         run: dist/Bricklasaren.app/Contents/MacOS/Bricklasaren --self-test
@@ -39,8 +47,8 @@ jobs:
         with:
           name: macOS-AppleSilicon
           path: |
-            dist/Bricklasaren-3.5.1-macOS-AppleSilicon.dmg
-            dist/Bricklasaren-3.5.1-macOS-AppleSilicon.zip
+            dist/Bricklasaren-3.5.2-macOS-AppleSilicon.dmg
+            dist/Bricklasaren-3.5.2-macOS-AppleSilicon.zip
             ${{ runner.temp }}/bricklasare-mac-ui
           if-no-files-found: error
-          retention-days: 14
+          retention-days: 3

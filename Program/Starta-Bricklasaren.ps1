@@ -19,10 +19,11 @@ try {
     Add-Type -AssemblyName System.Drawing
     Add-Type -AssemblyName System.IO.Compression
     Add-Type -AssemblyName System.IO.Compression.FileSystem
+    Add-Type -AssemblyName System.Management
     Add-Type -AssemblyName System.Web.Extensions
 
     $utf8 = New-Object System.Text.UTF8Encoding($true)
-    $files = @('Entry.cs', 'OmnikeyCore.cs', 'ReceptionSupport.cs', 'ReaderSafety.cs', 'Appearance.cs', 'SettingsDialogs.cs', 'FirstStart.cs', 'Workflow.cs', 'Updates.cs', 'ReliabilityTests.cs', 'ReceptionApp.cs')
+    $files = @('Entry.cs', 'OmnikeyCore.cs', 'ReaderNetwork.cs', 'ReaderNetworkTests.cs', 'ReceptionSupport.cs', 'ReaderSafety.cs', 'Appearance.cs', 'SettingsDialogs.cs', 'FirstStart.cs', 'Workflow.cs', 'Updates.cs', 'ReliabilityTests.cs', 'ReceptionApp.cs')
     $parts = foreach ($name in $files) {
         $path = Join-Path $PSScriptRoot $name
         if (-not (Test-Path -LiteralPath $path -PathType Leaf)) {
@@ -35,7 +36,7 @@ try {
         'System.dll', 'System.Core.dll', [System.IO.Compression.ZipArchive].Assembly.Location, [System.IO.Compression.ZipFile].Assembly.Location,
         [System.Drawing.Color].Assembly.Location,
         [System.Windows.Forms.Form].Assembly.Location,
-        [System.Web.Script.Serialization.JavaScriptSerializer].Assembly.Location
+        [System.Web.Script.Serialization.JavaScriptSerializer].Assembly.Location, [System.Management.ManagementObjectSearcher].Assembly.Location
     )
 
     # Same hosting approach as v2: compile the readable C# sources with Add-Type

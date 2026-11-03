@@ -27,6 +27,7 @@ final class PCSCTransport: ReaderTransport {
   }
   func exchange(_ bytes: [UInt8]) throws -> [UInt8] {
     guard let handle else { throw fail("DISCONNECTED", "Läsaren är frånkopplad.") }
+    try require(!bytes.isEmpty && bytes.count <= 262, "Ogiltig längd på läsarkommandot.")
     var output = [UInt8](repeating: 0, count: 4096)
     var count: UInt32 = 4096
     let status = bytes.withUnsafeBufferPointer { input in

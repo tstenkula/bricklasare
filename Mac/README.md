@@ -1,10 +1,10 @@
 # Brickläsaren för macOS
 
-Native Swift/AppKit version of Brickläsaren 3.5.1, for **Apple Silicon (arm64), macOS 13 or later**. It implements the Windows operator workflow and number formats with a native USB/PC/SC transport. There is no PowerShell, .NET, browser, background service, Python installation, Intel binary or Windows EEM driver at runtime.
+Native Swift/AppKit version of Brickläsaren 3.5.2, for **Apple Silicon (arm64), macOS 13 or later**. It implements the Windows operator workflow and number formats with a native USB/PC/SC transport. There is no PowerShell, .NET, browser, background service, Python installation, Intel binary or Windows EEM driver at runtime.
 
 ## Install and run
 
-Open `Bricklasaren-3.5.1-macOS-AppleSilicon.dmg`, drag `Bricklasaren.app` to **Program / Applications**, and open it. Connect one OMNIKEY 5427 CK or Gen2 without a tag on it. Approve the USB accessory if macOS requests it. Select the access system on first launch; no system is preselected. The choice and RCO chip selection persist per user.
+Open `Bricklasaren-3.5.2-macOS-AppleSilicon.dmg`, drag `Bricklasaren.app` to **Program / Applications**, and open it. Connect one OMNIKEY 5427 CK or Gen2 without a tag on it. Approve the USB accessory if macOS requests it. Select the access system on first launch; no system is preselected. The choice and RCO chip selection persist per user.
 
 The app uses an ad-hoc signature for execution on Apple Silicon. It is not Developer ID signed or notarized. A downloaded copy may require **System Settings → Privacy & Security → Open Anyway** after the first opening attempt. Do not disable Gatekeeper globally. See [Apple's instructions](https://support.apple.com/en-us/102445).
 
@@ -27,7 +27,7 @@ The app uses an ad-hoc signature for execution on Apple Silicon. It is not Devel
 | Copy / diagnostics | Native clipboard shortcuts; bounded diagnostics without card data; report export |
 | Connection settings | Native USB discovery; Windows-specific IP/EEM driver controls are unnecessary |
 
-No automatic updates, telemetry or tag history. The application cannot guarantee compatibility with every tag solely from its radio standard: it reads an accessible UID / 40-bit EM value, not encrypted application data. RCO uses the same default 4-byte convention as Windows; customized access-system formats and randomized UIDs require separate verification. Existing corrupt or firmware-mismatched local overrides block reading instead of silently selecting another format.
+Update checks are optional and installation requires confirmation. There is no telemetry or tag history. The application cannot guarantee compatibility with every tag solely from its radio standard: it reads an accessible UID / 40-bit EM value, not encrypted application data. RCO uses the same default 4-byte convention as Windows; customized access-system formats and randomized UIDs require separate verification. Existing corrupt or firmware-mismatched local overrides block reading instead of silently selecting another format.
 
 ## USB implementation and boundaries
 

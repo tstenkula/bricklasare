@@ -34,4 +34,6 @@ Mac: `Mac/build.sh`, followed by `dist/Bricklasaren.app/Contents/MacOS/Bricklasa
 
 CI compiles both platforms, runs offline reader simulations, update verification and settings/resource tests, and builds packages. Hardware behavior and a full-day USB/memory soak still require a real reader. macOS builds are ad-hoc signed for Apple Silicon; they are not Developer ID signed or notarized. Windows publisher warnings are not removed by this release. Update-feed signatures authenticate downloads separately from operating-system code signing.
 
+Version 3.5.2 also verifies signed update metadata at installation, binds Windows reader traffic to the identified USB network adapter, and checks malformed native responses with memory sanitizers. Free local/CI secret scanning, release controls and remaining trust limits are documented in [SECURITY.md](SECURITY.md).
+
 `SHA256SUMS.txt` covers repository files. Update feeds cover release archives. The release signing private key is never stored in this repository or in an application.

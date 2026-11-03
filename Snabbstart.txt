@@ -1,4 +1,4 @@
-﻿BRICKLÄSAREN – 3.5.1
+﻿BRICKLÄSAREN – 3.5.2
 
 Starta med Starta-Bricklasaren.cmd.
 Första gången väljer du passersystem och klickar Spara och börja.

@@ -1,4 +1,4 @@
-BRICKLÄSAREN 3.5.1 – VERIFIERING
+BRICKLÄSAREN 3.5.2 – VERIFIERING
 
 Tobtech-projekt med neutral standardprofil. Aktuell teststatus redovisas
 av GitHub Actions för Windows och macOS. Äldre leveransloggar och byggen

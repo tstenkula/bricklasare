@@ -8,6 +8,8 @@
 
 Startguiden finns också via **Anslut läsare** i huvudfönstret och **Hjälp → Ny dator – anslut läsare**. Det går att välja **Senare** utan att förlora det sparade passersystemet. En redan fungerande drivrutin behöver inte installeras om.
 
+Windows kontrollerar att anslutningen går genom läsarens identifierade USB-enhet och låser kommunikationen till den anslutningen. En adress på Wi-Fi, vanligt nätverk eller VPN räcker inte. Om läsaren inte kan identifieras entydigt stoppas anslutningen. Anslut en läsare åt gången och kontrollera USB-drivrutinen; programmet växlar inte till en annan nätverksväg.
+
 ## Standardformat och befintliga profiler
 
 Programmet identifierar originalmodellen (boardType 06) och Gen2 (0A). Båda måste klara samma kontroller av inställningar, identitet, firmware och skydd mot tangentbordsinmatning innan läsning tillåts. Okända modeller avvisas.
