@@ -2,10 +2,20 @@ name: Published update acceptance
 
 on:
   workflow_dispatch:
+    inputs:
+      case:
+        description: Published installer acceptance case
+        type: choice
+        default: all
+        options:
+          - all
+          - historical
+          - stable-3.6.1
   pull_request:
     paths:
       - tools/test-published-update.ps1
       - tools/test-published-mac-update.py
+      - tools/fixtures/published-stable-3.6.1.feed
       - .github/workflows/published-update-acceptance.yml
 
 permissions:
@@ -17,10 +27,14 @@ concurrency:
 
 jobs:
   windows:
-    name: Published Windows 3.5.2 to 3.6.0
+    name: Published Windows ${{ matrix.case }}
     if: github.repository == 'tstenkula/bricklasare' && (github.event_name == 'workflow_dispatch' || (github.event.pull_request.head.repo.full_name == 'tstenkula/bricklasare' && github.event.pull_request.base.repo.full_name == 'tstenkula/bricklasare' && github.head_ref != ''))
     runs-on: windows-2022
     timeout-minutes: 12
+    strategy:
+      fail-fast: false
+      matrix:
+        case: ${{ fromJSON(inputs.case == 'historical' && '["historical"]' || inputs.case == 'stable-3.6.1' && '["stable-3.6.1"]' || '["historical","stable-3.6.1"]') }}
     steps:
       - name: Check out acceptance tools
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -28,33 +42,41 @@ jobs:
           persist-credentials: false
       - name: Verify and install the actual public packages
         shell: powershell
-        run: tools/test-published-update.ps1 -InstallOnDisposableRunner -OutputDirectory '${{ runner.temp }}\published-windows-report'
+        env:
+          ACCEPTANCE_CASE: ${{ matrix.case }}
+        run: tools/test-published-update.ps1 -Case $env:ACCEPTANCE_CASE -InstallOnDisposableRunner -OutputDirectory '${{ runner.temp }}\published-windows-report'
       - name: Retain Windows acceptance evidence
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: published-windows-update-acceptance
+          name: published-windows-update-acceptance-${{ matrix.case }}
           path: ${{ runner.temp }}\published-windows-report
           if-no-files-found: warn
           retention-days: 3
 
   macos:
-    name: Published Mac 3.5.2 to 3.6.0
+    name: Published Mac ${{ matrix.case }}
     if: github.repository == 'tstenkula/bricklasare' && (github.event_name == 'workflow_dispatch' || (github.event.pull_request.head.repo.full_name == 'tstenkula/bricklasare' && github.event.pull_request.base.repo.full_name == 'tstenkula/bricklasare' && github.head_ref != ''))
     runs-on: macos-15
     timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        case: ${{ fromJSON(inputs.case == 'historical' && '["historical"]' || inputs.case == 'stable-3.6.1' && '["stable-3.6.1"]' || '["historical","stable-3.6.1"]') }}
     steps:
       - name: Check out acceptance tools
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
       - name: Verify and install the actual public packages
-        run: python3 tools/test-published-mac-update.py
+        env:
+          ACCEPTANCE_CASE: ${{ matrix.case }}
+        run: python3 tools/test-published-mac-update.py --case "$ACCEPTANCE_CASE"
       - name: Retain Mac acceptance evidence
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: published-mac-update-acceptance
+          name: published-mac-update-acceptance-${{ matrix.case }}
           path: |
             ${{ runner.temp }}/bricklasare-published-mac-update/*.json
             ${{ runner.temp }}/bricklasare-published-mac-update/*.log

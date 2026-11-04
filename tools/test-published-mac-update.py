@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
-"""Exercise the published 3.5.2 Mac installer against public, signed 3.6.0.
+"""Exercise an immutable published Mac installer against a signed release.
 
 Destructive installation is confined to a disposable GitHub-hosted Mac runner.
 This deliberately cannot run on a developer's Mac or a self-hosted runner.
 """
+import argparse
 import base64
 import ctypes
 import fcntl
@@ -26,14 +27,19 @@ import uuid
 import xml.etree.ElementTree as ET
 
 REPO = 'tstenkula/bricklasare'
-SOURCE = '3.5.2'
-TARGET = '3.6.0'
 FEED_COMMIT = '136898a6df968a3e0a99b6333dbe8983e4d464c3'
 FEED_SHA256 = 'cc104420dc4e9ffdbd2ca2a7d9f5563beb4efda4616c9c2fab899e355b4313d3'
-SOURCE_SHA256 = '7714bbc5bc869a2835aa3ee6ce719077da6b3fbcdf0e7fc15be7b7611bfd3e6f'
 RELEASE_PINS = {
-    SOURCE: (2_186_584, SOURCE_SHA256),
-    TARGET: (2_219_538, '328580e26dde16e2085c1f2a42bdc4388167f409754845e914935ba40472afd2'),
+    '3.5.2': (2_186_584, '7714bbc5bc869a2835aa3ee6ce719077da6b3fbcdf0e7fc15be7b7611bfd3e6f'),
+    '3.6.0': (2_219_538, '328580e26dde16e2085c1f2a42bdc4388167f409754845e914935ba40472afd2'),
+}
+# Fixed cases only: the stable target takes its size/hash from the real signed
+# fixture. It cannot run until that fixture has been published and reviewed.
+CASES = {
+    'historical': dict(source='3.5.2', target='3.6.0', channel='preview',
+                       source_tag='v3.5.2-preview.1', target_tag='v3.6.0-preview.1'),
+    'stable-3.6.1': dict(source='3.6.0', target='3.6.1', channel='stable',
+                       source_tag='v3.6.0-preview.1', target_tag='v3.6.1'),
 }
 HOSTS = {'github.com', 'raw.githubusercontent.com',
          'release-assets.githubusercontent.com', 'objects.githubusercontent.com'}
@@ -102,27 +108,43 @@ def download(url, maximum):
     return data
 
 
-def published(version):
-    require(version in RELEASE_PINS, 'This acceptance test requires a reviewed release pin.')
-    tag = 'v' + version + '-preview.1'
+def release_url(version, tag):
     name = f'Bricklasaren-{version}-macOS-AppleSilicon.zip'
-    url = f'https://github.com/{REPO}/releases/download/{tag}/{name}'
-    size, digest = RELEASE_PINS[version]
-    # These immutable release bytes were reviewed before publication. Download the
-    # same anonymous URLs used by the app, without a shared-IP REST API quota.
+    return f'https://github.com/{REPO}/releases/download/{tag}/{name}'
+
+
+def published(version, tag, pin):
+    url = release_url(version, tag)
+    size, digest = pin
+    # The prior installer is pinned to reviewed immutable bytes; the new package
+    # is authenticated by the signed feed. No shared-IP REST API quota is needed.
     data = download(url, size)
     require(len(data) == size and hashlib.sha256(data).hexdigest() == digest,
-            'Published package does not match its reviewed release size and SHA-256.')
+            'Published package does not match its required release size and SHA-256.')
     return url, data
 
 
-def verify_feed(envelope):
+def feed_for_case(name):
+    if name == 'historical':
+        envelope = download(f'https://raw.githubusercontent.com/{REPO}/{FEED_COMMIT}/Updates/preview.feed', 65_536)
+        require(hashlib.sha256(envelope).hexdigest() == FEED_SHA256, 'Original signed 3.6.0 feed changed.')
+        return envelope
+    require(name == 'stable-3.6.1', 'Unknown acceptance case.')
+    fixture = pathlib.Path(__file__).resolve().parent / 'fixtures/published-stable-3.6.1.feed'
+    require(fixture.is_file() and not fixture.is_symlink(), 'The reviewed signed 3.6.1 stable fixture is required.')
+    with fixture.open('rb') as stream:
+        envelope = stream.read(65_537)
+    require(0 < len(envelope) <= 65_536, 'Invalid stable fixture size.')
+    return envelope
+
+
+def verify_feed(envelope, case):
     header, encoded, signature = envelope.splitlines()
     require(header == b'BRICKLASARE-UPDATE-1', 'Unexpected feed envelope.')
     payload = base64.b64decode(encoded, validate=True)
     signed = base64.b64decode(signature, validate=True)
     # Independent public-key verification before executing a downloaded package.
-    # The real 3.5.2 helper repeats signature verification using its compiled key.
+    # The real prior helper repeats signature verification using its compiled key.
     source = (pathlib.Path(__file__).resolve().parent.parent / 'Program/Updates.cs').read_text(encoding='utf-8-sig')
     xml, = re.findall(r'<RSAKeyValue>.*?</RSAKeyValue>', source)
     key = ET.fromstring(xml)
@@ -134,9 +156,14 @@ def verify_feed(envelope):
     expected = b'\x00\x01' + b'\xff' * (384 - len(digest) - 3) + b'\x00' + digest
     require(pow(int.from_bytes(signed, 'big'), e, n).to_bytes(384, 'big') == expected, 'Public feed signature failed.')
     feed = json.loads(payload)
-    require(feed['Schema'] == 1 and feed['Channel'] == 'preview' and feed['Mac']['Version'] == TARGET,
-            'This test requires the published 3.6.0 preview feed.')
-    return feed['Mac']
+    require(feed['Schema'] == 1 and feed['Channel'] == case['channel']
+            and feed['Mac']['Version'] == case['target'], 'Feed does not match the selected acceptance case.')
+    asset = feed['Mac']
+    require(asset['Url'] == release_url(case['target'], case['target_tag'])
+            and type(asset['Size']) is int and 0 < asset['Size'] <= 52_428_800
+            and isinstance(asset['Sha256'], str) and re.fullmatch(r'[a-f0-9]{64}', asset['Sha256']),
+            'Signed target metadata is outside the fixed acceptance case.')
+    return asset
 
 
 def tree(path):
@@ -183,25 +210,30 @@ def stop_processes(roots):
 
 
 def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--case', choices=CASES, default='historical')
+    case_name = parser.parse_args().case
+    case = CASES[case_name]
     runner_temp, data_parent = guard_runner()  # No filesystem mutation before this guard.
+    # A missing or invalid stable fixture fails before creating runner data.
+    envelope = feed_for_case(case_name)
+    offered = verify_feed(envelope, case)
     report_dir = runner_temp / 'bricklasare-published-mac-update'
     report_dir.mkdir(exist_ok=False)
     work = pathlib.Path(tempfile.mkdtemp(prefix='bricklasare-mac-update-', dir=runner_temp)).resolve()
     data = data_parent / 'Bricklasaren'
     data.mkdir(parents=True, mode=0o700)
-    result = {'source': SOURCE, 'target': TARGET, 'passed': False, 'checks': [],
+    result = {'case': case_name, 'source': case['source'], 'target': case['target'],
+              'channel': case['channel'], 'passed': False, 'checks': [],
               'scope': 'Published packages and actual installer on disposable Apple Silicon runner; no reader/tag or OS publisher-warning test.'}
     owned_roots = (work, data.resolve())
     try:
-        envelope = download(f'https://raw.githubusercontent.com/{REPO}/{FEED_COMMIT}/Updates/preview.feed', 65_536)
-        require(hashlib.sha256(envelope).hexdigest() == FEED_SHA256, 'Original signed 3.6.0 feed changed.')
-        offered = verify_feed(envelope)
-        _, old_zip = published(SOURCE)
-        new_url, new_zip = published(TARGET)
-        require(hashlib.sha256(old_zip).hexdigest() == SOURCE_SHA256, 'Prior installer differs from its pinned immutable package.')
+        _, old_zip = published(case['source'], case['source_tag'], RELEASE_PINS[case['source']])
+        target_pin = RELEASE_PINS.get(case['target'], (offered['Size'], offered['Sha256']))
+        new_url, new_zip = published(case['target'], case['target_tag'], target_pin)
         require(offered['Url'] == new_url and offered['Size'] == len(new_zip)
                 and offered['Sha256'] == hashlib.sha256(new_zip).hexdigest(), 'Feed and immutable target package disagree.')
-        result['checks'].append('Anonymous public feed and both immutable ZIP downloads; signed feed and pinned release sizes/SHA-256 verified')
+        result['checks'].append('Anonymous public ZIP downloads; pinned prior installer and signed target size/SHA-256 verified')
         for name, content in [('old.zip', old_zip), ('new.zip', new_zip)]:
             (work / name).write_bytes(content)
         command(['/usr/bin/ditto', '-x', '-k', work / 'old.zip', work / 'install'])
@@ -213,7 +245,7 @@ def main():
         expected_tree = tree(work / 'expected/Bricklasaren.app')
         settings = {
             'formatval.json': b'{"Mode":"RCO","RcoChip":"E"}',
-            'arbetsflode.json': b'{"copy":0,"sounds":false,"channel":"preview","autoCheck":false}',
+            'arbetsflode.json': ('{"copy":0,"sounds":false,"channel":"' + case['channel'] + '","autoCheck":false}').encode(),
             'utseende.json': b'{"Schema":1,"AccentHex":"#003B55","Organization":"","Subtitle":"","LogoFile":""}',
             'bevara-test.txt': b'Synthetic setting must survive the update.\n',
         }
@@ -232,7 +264,7 @@ def main():
             (job / 'release.feed').write_bytes(feed)
             (job / 'package.zip').write_bytes(package)
             parent = subprocess.Popen(['/bin/sleep', '0.5'])
-            plan.write_text(json.dumps(dict(target=str(target), directory=str(job), parent=parent.pid, channel='preview')))
+            plan.write_text(json.dumps(dict(target=str(target), directory=str(job), parent=parent.pid, channel=case['channel'])))
             child = None
             try:
                 child = subprocess.Popen([str(helper), '--install-update', str(plan)],
@@ -277,7 +309,7 @@ def main():
             install_case('Pending recovery blocks replacement and preserves settings', envelope, new_zip, False)
         finally:
             pending.unlink()
-        install_case('Actual 3.5.2 helper installs the signed 3.6.0 package', envelope, new_zip, True)
+        install_case(f"Actual {case['source']} helper installs the signed {case['target']} package", envelope, new_zip, True)
         require(tree(target) == expected_tree, 'Installed app differs from the signed release package.')
         backups = list(target.parent.glob('Bricklasaren.previous-*.app'))
         require(len(backups) == 1 and tree(backups[0]) == original_tree, 'Original app was not preserved exactly.')
