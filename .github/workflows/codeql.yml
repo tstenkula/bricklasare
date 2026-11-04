@@ -53,8 +53,11 @@ jobs:
           dependency-caching: false
       - name: Build native Mac application for analysis
         if: matrix.language == 'swift'
-        run: Mac/build.sh --no-dmg
+        run: bash tools/codeql-build-mac.sh
       - name: Publish analysis
         uses: github/codeql-action/analyze@1fc58d04a4d4374f921bdac573c3811c240f9c26 # v4.39.2
         with:
           category: /language:${{ matrix.language }}
+      - name: Show bounded Swift extractor diagnostics on failure
+        if: failure() && matrix.language == 'swift'
+        run: bash tools/codeql-build-mac.sh --diagnostics
