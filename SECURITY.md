@@ -1,6 +1,6 @@
 # Security policy
 
-Tobtech maintains the newest published Brickläsaren preview. Until real-reader acceptance testing is complete, releases remain previews. Security fixes are delivered in new versions; published packages are not replaced in place.
+Tobtech maintains the newest published Brickläsaren release. Version 3.6.1 is stable; physical reader acceptance testing is still pending. See the hardware checklist in IT/Verifiering.txt. Security fixes are delivered in new versions; published packages are not replaced in place.
 
 ## Report a vulnerability
 

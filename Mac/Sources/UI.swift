@@ -221,6 +221,28 @@ final class ResultView {
   }
 }
 
+final class DownloadProgressBar: NSView {
+  var fraction = 0.0
+  var color = Theme("#003B55").accent
+  override init(frame frameRect: NSRect) {
+    super.init(frame: frameRect)
+    translatesAutoresizingMaskIntoConstraints = false
+    heightAnchor.constraint(equalToConstant: 8).isActive = true
+    setAccessibilityElement(true)
+    setAccessibilityRole(.progressIndicator)
+    setAccessibilityLabel("Uppdateringens nedladdning")
+  }
+  required init?(coder: NSCoder) { fatalError("init(coder:) is not supported") }
+  override func draw(_ dirtyRect: NSRect) {
+    Theme.mix(color, .white, 0.85).setFill()
+    NSBezierPath(roundedRect: bounds, xRadius: 4, yRadius: 4).fill()
+    guard fraction > 0 else { return }
+    color.setFill()
+    let filled = NSRect(x: 0, y: 0, width: bounds.width * min(1, fraction), height: bounds.height)
+    NSBezierPath(roundedRect: filled, xRadius: 4, yRadius: 4).fill()
+  }
+}
+
 // Stable views preserve keyboard focus and avoid rebuilding/decoding branding during a scan.
 final class ReaderView {
   let root = stack(spacing: 14)
@@ -239,6 +261,13 @@ final class ReaderView {
   let helpButton: ActionButton, bothButton: ActionButton, clearButton: ActionButton
   let first: ResultView, second: ResultView
   let instructionPanel: NSView
+  let updatePanel: NSView
+  let updateBar = DownloadProgressBar(frame: .zero)
+  let updateLabel = label("", size: 14, bold: true)
+  let updateSpinner = NSProgressIndicator()
+  let resultActions = stack(horizontal: true, spacing: 8)
+  let results = stack(horizontal: true, spacing: 14)
+  let readerActions = stack(spacing: 8)
   private var lastInstruction = ""
 
   init(_ controller: AppController) {
@@ -292,7 +321,8 @@ final class ReaderView {
       field.widthAnchor.constraint(equalTo: messages.widthAnchor).isActive = true
     }
     messages.setContentHuggingPriority(.defaultLow, for: .horizontal)
-    let actions = stack([readButton, cancelButton, connectButton], spacing: 8)
+    let actions = readerActions
+    for button in [readButton, cancelButton, connectButton] { actions.addArrangedSubview(button) }
     actions.widthAnchor.constraint(equalToConstant: 200).isActive = true
     for button in actions.arrangedSubviews {
       button.widthAnchor.constraint(equalTo: actions.widthAnchor).isActive = true
@@ -300,10 +330,24 @@ final class ReaderView {
     instructionPanel = cardPanel(stack([messages, actions], horizontal: true, spacing: 20), color: .white)
     addFull(root, instructionPanel)
 
+    updateSpinner.style = .spinning
+    updateSpinner.controlSize = .small
+    updateSpinner.translatesAutoresizingMaskIntoConstraints = false
+    updateSpinner.widthAnchor.constraint(equalToConstant: 16).isActive = true
+    updateSpinner.heightAnchor.constraint(equalToConstant: 16).isActive = true
+    updateSpinner.setAccessibilityElement(false)
+    let updateContent = stack(spacing: 12)
+    addFull(updateContent, stack([updateSpinner, updateLabel], horizontal: true, spacing: 10))
+    addFull(updateContent, updateBar)
+    updatePanel = cardPanel(updateContent, color: controller.theme.light, padding: 20)
+    addFull(root, updatePanel)
+
     let resultTitle = label("Bricknummer", size: 14, bold: true)
     resultTitle.setContentHuggingPriority(.defaultLow, for: .horizontal)
-    addFull(root, stack([resultTitle, bothButton, clearButton], horizontal: true, spacing: 8))
-    let results = stack([first.panel, second.panel], horizontal: true, spacing: 14)
+    for view in [resultTitle, bothButton, clearButton] { resultActions.addArrangedSubview(view) }
+    addFull(root, resultActions)
+    results.addArrangedSubview(first.panel)
+    results.addArrangedSubview(second.panel)
     results.distribution = .fillEqually
     addFull(root, results)
     addFull(root, notice)
@@ -333,10 +377,37 @@ final class ReaderView {
     stage.textColor = c.warning ? .systemBrown : theme.text
     instruction.stringValue = c.instruction
     hint.stringValue = c.hint
+    let updating = c.updateProgress != nil
+    updatePanel.isHidden = !updating
+    resultActions.isHidden = updating
+    results.isHidden = updating
+    footer.isHidden = updating
+    readerActions.isHidden = updating
+    if let progress = c.updateProgress {
+      updateLabel.stringValue = progress.detail
+      updateLabel.textColor = theme.text
+      updatePanel.layer?.backgroundColor = theme.light.cgColor
+      if let fraction = progress.fraction {
+        updateBar.fraction = fraction
+        updateBar.color = theme.accent
+        updateBar.setAccessibilityValue(NSNumber(value: progress.percentage ?? 0))
+        updateBar.needsDisplay = true
+        updateBar.isHidden = false
+        updateSpinner.stopAnimation(nil)
+        updateSpinner.isHidden = true
+      } else {
+        updateBar.isHidden = true
+        updateSpinner.isHidden = false
+        updateSpinner.startAnimation(nil)
+      }
+    } else {
+      updateSpinner.stopAnimation(nil)
+    }
     instructionPanel.layer?.backgroundColor = (c.warning
       ? NSColor(srgbRed: 1, green: 0.955, blue: 0.9, alpha: 1) : theme.light).cgColor
     readButton.title = c.outputs == nil ? "Läs bricka" : "Läs nästa bricka"
     readButton.setAccessibilityLabel(readButton.title)
+    readButton.isHidden = updating
     readButton.isEnabled = !c.busy && !c.reconnectPending && c.preference != nil && c.info?.ready == true && c.usbMonitor?.timedOut != true
     cancelButton.isHidden = !c.busy || c.token == nil
     connectButton.isHidden = c.info != nil || c.busy
@@ -390,6 +461,8 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
   var usbMonitor: USBMonitor?
   var reconnectPending = false
   var updateChecking = false
+  var updateOperation: UUID?
+  var updateProgress: UpdateProgress?
   var startupUpdatePending = false
   var engine: ReaderEngine?
   var info: ReaderInfo?
@@ -437,7 +510,7 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
       contentRect: NSRect(x: 0, y: 0, width: 900, height: 650),
       styleMask: [.titled, .closable, .miniaturizable, .resizable], backing: .buffered, defer: false
     )
-    window.title = "Brickläsaren · 3.6.0 · macOS"
+    window.title = "Brickläsaren · 3.6.1 · macOS"
     window.isReleasedWhenClosed = false
     window.minSize = NSSize(width: 800, height: 600)
     window.backgroundColor = Theme.paper
@@ -449,7 +522,9 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
   func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
     if busy {
       token?.cancel()
-      notice = "Låt programmet avsluta åtgärden och återställa läsaren. Avsluta sedan igen."
+      notice = updateOperation == nil
+        ? "Låt programmet avsluta åtgärden och återställa läsaren. Avsluta sedan igen."
+        : "Uppdateringen pågår. Låt appen vara öppen tills den är klar."
       rebuild()
       return .terminateCancel
     }
@@ -460,7 +535,9 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
   func windowShouldClose(_ sender: NSWindow) -> Bool {
     if busy {
       token?.cancel()
-      notice = "Vänta tills åtgärden är avslutad och stäng sedan igen."
+      notice = updateOperation == nil
+        ? "Vänta tills åtgärden är avslutad och stäng sedan igen."
+        : "Uppdateringen pågår. Låt appen vara öppen tills den är klar."
       rebuild()
       return false
     }
@@ -498,7 +575,7 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
   }
   @objc func aboutApp() {
     let a = NSAlert()
-    a.messageText = "Brickläsaren 3.6.0 för macOS"
+    a.messageText = "Brickläsaren 3.6.1 för macOS"
     a.informativeText =
       "Tobtech\n\nGratis för privat bruk. Kommersiellt bruk kräver en betald licens."
     a.addButton(withTitle: "Stäng")
@@ -552,6 +629,12 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
   }
   func readyMessage() {
     warning = false
+    if let updateProgress {
+      stage = "UPPDATERAR"
+      instruction = updateProgress.title
+      hint = "Låt appen vara öppen medan uppdateringen förbereds."
+      return
+    }
     if usbMonitor?.timedOut == true {
       connection = "Läsarens anslutning behöver kontrolleras"
       stage = "KONTROLLERAR ANSLUTNINGEN"
@@ -634,7 +717,7 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
       (error as? ReaderError)?.message
       ?? "Inställningen kunde inte läsas eller sparas. Kontrollera filbehörigheterna."
     // Only bounded codes and app/platform versions are persisted, never exception payloads/APDUs/card IDs.
-    try? store.writeData("senaste-fel.txt", Data("Brickläsaren 3.6.0 macOS\nKod: \(code)\n".utf8))
+    try? store.writeData("senaste-fel.txt", Data("Brickläsaren 3.6.1 macOS\nKod: \(code)\n".utf8))
     DispatchQueue.main.async {
       self.info = self.reconnectPending ? nil : info
       self.latestErrorCode = code

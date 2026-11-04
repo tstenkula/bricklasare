@@ -31,7 +31,11 @@ TARGET = '3.6.0'
 FEED_COMMIT = '136898a6df968a3e0a99b6333dbe8983e4d464c3'
 FEED_SHA256 = 'cc104420dc4e9ffdbd2ca2a7d9f5563beb4efda4616c9c2fab899e355b4313d3'
 SOURCE_SHA256 = '7714bbc5bc869a2835aa3ee6ce719077da6b3fbcdf0e7fc15be7b7611bfd3e6f'
-HOSTS = {'github.com', 'api.github.com', 'raw.githubusercontent.com',
+RELEASE_PINS = {
+    SOURCE: (2_186_584, SOURCE_SHA256),
+    TARGET: (2_219_538, '328580e26dde16e2085c1f2a42bdc4388167f409754845e914935ba40472afd2'),
+}
+HOSTS = {'github.com', 'raw.githubusercontent.com',
          'release-assets.githubusercontent.com', 'objects.githubusercontent.com'}
 
 
@@ -99,20 +103,17 @@ def download(url, maximum):
 
 
 def published(version):
+    require(version in RELEASE_PINS, 'This acceptance test requires a reviewed release pin.')
     tag = 'v' + version + '-preview.1'
-    metadata = json.loads(download(f'https://api.github.com/repos/{REPO}/releases/tags/{tag}', 1_048_576))
-    require(metadata['tag_name'] == tag and metadata['immutable'] and not metadata['draft'],
-            'Expected a published immutable release.')
     name = f'Bricklasaren-{version}-macOS-AppleSilicon.zip'
-    matches = [a for a in metadata['assets'] if a['name'] == name]
-    require(len(matches) == 1, 'Release ZIP is missing or ambiguous.')
-    asset = matches[0]
-    expected = f'https://github.com/{REPO}/releases/download/{tag}/{name}'
-    require(asset['browser_download_url'] == expected, 'Unexpected immutable package URL.')
-    data = download(expected, 52_428_800)
-    require(len(data) == asset['size'] and 'sha256:' + hashlib.sha256(data).hexdigest() == asset['digest'],
-            'Published package does not match GitHub metadata.')
-    return asset, data
+    url = f'https://github.com/{REPO}/releases/download/{tag}/{name}'
+    size, digest = RELEASE_PINS[version]
+    # These immutable release bytes were reviewed before publication. Download the
+    # same anonymous URLs used by the app, without a shared-IP REST API quota.
+    data = download(url, size)
+    require(len(data) == size and hashlib.sha256(data).hexdigest() == digest,
+            'Published package does not match its reviewed release size and SHA-256.')
+    return url, data
 
 
 def verify_feed(envelope):
@@ -195,12 +196,12 @@ def main():
         envelope = download(f'https://raw.githubusercontent.com/{REPO}/{FEED_COMMIT}/Updates/preview.feed', 65_536)
         require(hashlib.sha256(envelope).hexdigest() == FEED_SHA256, 'Original signed 3.6.0 feed changed.')
         offered = verify_feed(envelope)
-        old_asset, old_zip = published(SOURCE)
-        new_asset, new_zip = published(TARGET)
+        _, old_zip = published(SOURCE)
+        new_url, new_zip = published(TARGET)
         require(hashlib.sha256(old_zip).hexdigest() == SOURCE_SHA256, 'Prior installer differs from its pinned immutable package.')
-        require(offered['Url'] == new_asset['browser_download_url'] and offered['Size'] == len(new_zip)
+        require(offered['Url'] == new_url and offered['Size'] == len(new_zip)
                 and offered['Sha256'] == hashlib.sha256(new_zip).hexdigest(), 'Feed and immutable target package disagree.')
-        result['checks'].append('Anonymous public feed and both immutable ZIP downloads; signed feed and server hashes verified')
+        result['checks'].append('Anonymous public feed and both immutable ZIP downloads; signed feed and pinned release sizes/SHA-256 verified')
         for name, content in [('old.zip', old_zip), ('new.zip', new_zip)]:
             (work / name).write_bytes(content)
         command(['/usr/bin/ditto', '-x', '-k', work / 'old.zip', work / 'install'])

@@ -37,6 +37,8 @@
                 ExerciseFirstStart(Path.Combine(directory, "first-start"));
                 ExerciseReaderWorkspace(Path.Combine(directory, "workspace"));
                 ExerciseLateReaderCompletion(Path.Combine(directory, "late-completion"));
+                ExerciseConfirmedOperations(Path.Combine(directory, "confirmed-operations"));
+                ExerciseDownloadProgress(Path.Combine(directory, "download-progress"));
                 ExerciseWorkflow(Path.Combine(directory, "workflow"));
                 ExerciseExport(Path.Combine(directory, "export"));
                 LocalLog log = new LocalLog(); log.Add("old-entry");
@@ -289,6 +291,103 @@
                 Call(form, "SetBusy", false);
                 Call(form, "PublishScanResult", new ScanResult { Mr = "102700513", Er = "051501029" }, reader, FormatProfiles.Combo, "M", false, System.Threading.CancellationToken.None);
                 Check((bool)Call(form, "get_HasResults") && Field<Label>(form, "instruction").Text == "Läsningen är klar", "Healthy completion still publishes the validated numbers");
+            }
+        }
+        private static System.Threading.Tasks.Task<bool> ConfirmedUpdate(ReceptionForm form, string directory, Func<Action<UpdateProgress>, System.Threading.Tasks.Task> operation)
+        {
+            return (System.Threading.Tasks.Task<bool>)Call(form, "RunConfirmedUpdate", Field<WorkflowSettings>(form, "workflow").Channel, directory, operation);
+        }
+        private static void ExerciseConfirmedOperations(string directory)
+        {
+            Directory.CreateDirectory(directory);
+            using (ReceptionForm form = new ReceptionForm(true, directory))
+            {
+                form.Show(); Application.DoEvents();
+                int calls = 0;
+                Func<Action<UpdateProgress>, System.Threading.Tasks.Task> work = delegate(Action<UpdateProgress> progress) { calls++; return System.Threading.Tasks.Task.FromResult(true); };
+                Call(form, "SetBusy", true);
+                Check(!ConfirmedUpdate(form, directory, work).Result && calls == 0 && Field<bool>(form, "busy"), "Update confirmation does not take busy ownership from reconnect");
+                Call(form, "SetBusy", false); SetField(form, "reconnectPending", true);
+                Check(!ConfirmedUpdate(form, directory, work).Result && calls == 0 && !Field<bool>(form, "busy"), "Update confirmation rejects a newly pending reconnect");
+                SetField(form, "reconnectPending", false);
+                string pending = Path.Combine(directory, "usb-pending-confirmation.json"); File.WriteAllText(pending, "synthetic");
+                Check(!ConfirmedUpdate(form, directory, work).Result && calls == 0, "Update confirmation rechecks recovery journals after the dialog"); File.Delete(pending);
+                Check(ConfirmedUpdate(form, directory, work).Result && calls == 1 && !Field<bool>(form, "busy"), "Offline update needs no reader and releases its own busy state");
+                System.Threading.Tasks.TaskCompletionSource<bool> gate = new System.Threading.Tasks.TaskCompletionSource<bool>();
+                Action<UpdateProgress> late = null;
+                System.Threading.Tasks.Task<bool> running = ConfirmedUpdate(form, directory, delegate(Action<UpdateProgress> progress) { late = progress; return gate.Task; });
+                Check(!running.IsCompleted && Field<bool>(form, "busy"), "Asynchronous preparation retains its busy ownership");
+                SetField(form, "reconnectPending", true);
+                Check(!ConfirmedUpdate(form, directory, work).Result && calls == 1 && Field<bool>(form, "busy"), "A rejected second update cannot release the active operation");
+                gate.SetException(new IOException("synthetic download failure")); Application.DoEvents();
+                Check(running.IsCompleted, "The failed update continuation completes on the UI thread");
+                bool failed = false; try { running.GetAwaiter().GetResult(); } catch (IOException) { failed = true; }
+                Check(failed && !Field<bool>(form, "busy") && Field<bool>(form, "reconnectPending"), "Failed asynchronous update releases only its own busy state");
+                string before = Field<Label>(form, "updateTitle").Text;
+                late(new UpdateProgress(UpdatePhase.Download, 50, 100));
+                Check(!Field<UiCard>(form, "updatePanel").Visible && Field<Label>(form, "updateTitle").Text == before, "Late download callback cannot revive a finished progress view");
+            }
+            using (ReceptionForm form = ReaderPreview(directory, FormatProfiles.Combo))
+            {
+                ReaderClient expected = Field<ReaderClient>(form, "reader");
+                Call(form, "SetBusy", true);
+                Check(!(bool)Call(form, "TryBeginReaderOperation", expected, false) && Field<bool>(form, "busy"), "Reader confirmation cannot take busy ownership from reconnect"); Call(form, "SetBusy", false);
+                SetField(form, "reconnectPending", true);
+                Check(!(bool)Call(form, "TryBeginReaderOperation", expected, false), "Reader confirmation rejects USB changes during the dialog"); SetField(form, "reconnectPending", false);
+                FakeReader fake = new FakeReader(); ReaderClient replacement = new ReaderClient("192.168.63.99", directory, new LocalLog()); replacement.TestTransport = fake.Send; replacement.Connect();
+                SetField(form, "reader", replacement);
+                Check(!(bool)Call(form, "TryBeginReaderOperation", expected, false), "Profile import and USB restore reject a replaced reader object"); SetField(form, "reader", expected);
+                Call(expected, "set_CalibrationIssue", "Synthetic calibration issue");
+                Check((bool)Call(form, "TryBeginReaderOperation", expected, false), "Profile repair remains available when ordinary reading is not ready"); Call(form, "SetBusy", false);
+                string journal = Path.Combine(directory, "aterstall-" + expected.ReaderId + ".json"); File.WriteAllText(journal, "synthetic");
+                Check(!(bool)Call(form, "TryBeginReaderOperation", expected, false), "A newly pending recovery blocks profile import and USB mode restoration");
+                Check((bool)Call(form, "TryBeginReaderOperation", expected, true), "Recovery can claim the matching reader despite not being ready to scan"); Call(form, "SetBusy", false); File.Delete(journal);
+                Check(!(bool)Call(form, "TryBeginReaderOperation", expected, true), "Recovery confirmation rejects a journal removed while its dialog was open");
+            }
+        }
+        private sealed class SmallReads : MemoryStream
+        {
+            internal SmallReads(byte[] bytes) : base(bytes) { }
+            public override int Read(byte[] buffer, int offset, int count) { return base.Read(buffer, offset, Math.Min(count, 10)); }
+        }
+        private static void ExerciseDownloadProgress(string directory)
+        {
+            Directory.CreateDirectory(directory);
+            System.Collections.Generic.List<UpdateProgress> progress = new System.Collections.Generic.List<UpdateProgress>();
+            long elapsed = 0;
+            using (SmallReads input = new SmallReads(new byte[1000]))
+                Check(Updates.ReadDownload(input, 2000, 1000, progress.Add, delegate { return elapsed += 10; }).Length == 1000, "Progress reads the exact signed package length");
+            Check(progress.Count <= 12 && progress[0].Percent == 0 && progress.Last().Percent == 100, "Download reports are throttled with exact start and EOF completion");
+            Check(progress.Take(progress.Count - 1).All(p => p.Percent < 100) && progress.All(p => p.Total == 1000), "Only exact EOF reaches 100 percent against the signed total");
+            progress.Clear();
+            Reject(delegate { using (MemoryStream input = new MemoryStream(new byte[3])) Updates.ReadDownload(input, 20, 4, progress.Add, null); }, "Truncated signed download fails");
+            Check(progress.All(p => p.Percent < 100), "Truncated download never reports completion"); progress.Clear();
+            Reject(delegate { using (MemoryStream input = new MemoryStream(new byte[5])) Updates.ReadDownload(input, 20, 4, progress.Add, null); }, "Oversize signed download fails before completion");
+            Check(progress.All(p => p.Percent < 100), "Oversize download never reports completion");
+            Reject(delegate { using (MemoryStream input = new MemoryStream(new byte[4])) Updates.ReadDownload(input, 20, 4, null, delegate { return 180001; }); }, "Download progress preserves the overall time bound");
+            Check(new UpdateProgress(UpdatePhase.Download, 500000, 1000000).Detail == "50 % · 0,50 av 1,00 MB", "Progress displays actual percentage and readable decimal megabytes");
+            Reject(delegate { new UpdateProgress(UpdatePhase.Download, 5, 4); }, "Progress rejects bytes beyond the signed length");
+            using (ReceptionForm form = new ReceptionForm(true, directory))
+            {
+                form.Show(); Application.DoEvents();
+                Call(form, "SetBusy", true); SetField(form, "updateProgressGeneration", 1); Field<UiCard>(form, "updatePanel").Visible = true;
+                Call(form, "SetInstruction", "UPPDATERAR", "Hämtar en ny version", "Låt programmet arbeta klart. Dina inställningar sparas.", false);
+                Call(form, "ShowUpdateProgress", new UpdateProgress(UpdatePhase.Download, 620000, 1000000), 1);
+                Check(Field<UpdateProgressBar>(form, "updateBar").Percent == 62 && !Field<UpdateProgressBar>(form, "updateBar").Indeterminate, "Actual download progress reaches the visible bar");
+                RenderSnapshot(form, "uppdatering-hamtar");
+                Call(form, "ShowUpdateProgress", new UpdateProgress(UpdatePhase.Verify, 1000000, 1000000, true), 1);
+                Check(Field<UpdateProgressBar>(form, "updateBar").Indeterminate && Field<Label>(form, "updateTitle").Text == "Kontrollerar uppdateringen", "Verification has a distinct phase without invented percentage");
+                RenderSnapshot(form, "uppdatering-kontrollerar");
+                Call(form, "ShowUpdateProgress", new UpdateProgress(UpdatePhase.PrepareInstallation, 1000000, 1000000, true), 1);
+                Check(Field<Label>(form, "updateTitle").Text == "Förbereder installation", "Preparation never claims the separate installer has completed");
+                RenderSnapshot(form, "uppdatering-forbereder");
+                form.ClientSize = new Size(800, 600);
+                Call(form, "ShowUpdateProgress", new UpdateProgress(UpdatePhase.Download, 370000, 1000000), 1); Application.DoEvents();
+                Check(Inside(form, Field<UpdateProgressBar>(form, "updateBar")) && Inside(form, Field<Label>(form, "updateDetail")) && Inside(form, Field<Button>(form, "copyE")), "Compact download progress and result actions remain in view");
+                RenderSnapshot(form, "uppdatering-hamtar-kompakt");
+                Call(form, "ShowUpdateProgress", new UpdateProgress(UpdatePhase.Verify, 1000000, 1000000, true), 1); Application.DoEvents();
+                Check(Inside(form, Field<Label>(form, "updateDetail")) && Inside(form, Field<Button>(form, "copyE")), "Compact verification state retains visible text and result actions");
+                RenderSnapshot(form, "uppdatering-kontrollerar-kompakt");
             }
         }
         private static void ExerciseWorkflow(string directory)
@@ -547,15 +646,19 @@
         {
             using (form)
             {
-                string output = Environment.GetEnvironmentVariable("BRICKLASARE_TEST_IMAGES");
-                if (String.IsNullOrEmpty(output)) return;
-                Directory.CreateDirectory(output);
-                form.Show(); Application.DoEvents(); form.Refresh();
-                using (Bitmap bitmap = new Bitmap(form.Width, form.Height))
-                {
-                    form.DrawToBitmap(bitmap, new Rectangle(0, 0, bitmap.Width, bitmap.Height));
-                    bitmap.Save(Path.Combine(output, name + ".png"), ImageFormat.Png);
-                }
+                RenderSnapshot(form, name);
+            }
+        }
+        private static void RenderSnapshot(Form form, string name)
+        {
+            string output = Environment.GetEnvironmentVariable("BRICKLASARE_TEST_IMAGES");
+            if (String.IsNullOrEmpty(output)) return;
+            Directory.CreateDirectory(output);
+            form.Show(); Application.DoEvents(); form.Refresh();
+            using (Bitmap bitmap = new Bitmap(form.Width, form.Height))
+            {
+                form.DrawToBitmap(bitmap, new Rectangle(0, 0, bitmap.Width, bitmap.Height));
+                bitmap.Save(Path.Combine(output, name + ".png"), ImageFormat.Png);
             }
         }
     }

@@ -143,7 +143,8 @@ extension AppController {
   @objc func shortcutRead() { if !busy && info?.ready == true { scan() } }
   @objc func shortcutCancel() {
     if let dialog = NSApp.modalWindow as? Dialog { dialog.finish(false); return }
-    token?.cancel()
+    guard let token else { return }
+    token.cancel()
     if busy { clearResults(); notice = "Avbryter och återställer läsaren …"; rebuild() }
   }
   @objc func shortcutFirst() { if let outputs { copy(outputs.0) } }
