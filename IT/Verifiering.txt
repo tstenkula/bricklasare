@@ -19,5 +19,6 @@ drivrutin/tillbehörsgodkännande, läsning med verkliga taggar, urkoppling
 under läsning, vila/återanslutning och längre drift. Att resurstesterna
 passerar är inte ett bevis på att alla tänkbara minnesläckor är uteslutna.
 
-Uppdateringskällan blir tillgänglig för vanliga användare först när repot
-senare görs publikt. Ingen OS-kodsignering eller notariering har införts.
+Uppdateringskällan är publik och kan hämtas utan inloggning. Den stabila
+kanalen är tom tills hårdvaruproven är godkända. Ingen OS-kodsignering
+eller notariering har införts.

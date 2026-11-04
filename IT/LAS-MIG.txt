@@ -141,6 +141,6 @@ ARBETSFLODE OCH UPPDATERINGAR
 Under Hjälp > IT-inställningar kan automatisk kopiering, ljudsignaler,
 uppdateringskanal och automatisk versionskontroll väljas. Uppdateringen
 kräver uttryckligt installationsval och bevarar lokala inställningar.
-Se Updates/README.md i källkoden. Repot är fortfarande privat.
+Se Updates/README.md i källkoden. Repot och uppdateringskällan är publika.
 Gratis privat bruk; kommersiellt och organisatoriskt bruk kräver separat
 betald Tobtech-licens. Se LICENSE.txt.

@@ -8,6 +8,10 @@ The interface is Swedish. Supported output formats are **RCO – MIFARE + EM (mR
 
 **Source available, not open source.** Private personal noncommercial use of official releases is free. Commercial, professional and organizational use requires a separate paid written license from Tobtech. Redistribution, rebranding and reuse in other products are restricted. Inspection, issues and proposed fixes are welcome under [LICENSE.txt](LICENSE.txt) and [CONTRIBUTING.md](CONTRIBUTING.md). No purchase or price is implied by downloading a release.
 
+## Release status
+
+[Official downloads](https://github.com/tstenkula/bricklasare/releases) are public and require no GitHub account. The current release is **3.6.0 preview**. Automated checks pass, but first-use setup, physical tag reads and recovery still require acceptance testing with a real reader. The stable update channel is intentionally empty until that testing is complete.
+
 ## Start
 
 - Windows: extract the complete ZIP and open `Starta-Bricklasaren.cmd`. Choose the access system on first use. If needed, the connection guide opens the [official EEM driver page](https://www.hidglobal.com/drivers/34881). Driver binaries are not bundled.

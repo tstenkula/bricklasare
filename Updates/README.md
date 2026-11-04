@@ -2,7 +2,7 @@
 
 Programmen hämtar en liten, signerad uppdateringsfil från `https://raw.githubusercontent.com/tstenkula/bricklasare/main/Updates/stable.feed` eller `preview.feed`. Där anges version, storlek, SHA-256 och en GitHub Release-adress för respektive plattform. Inga GitHub-token eller behörighetskoder lagras i programmen.
 
-**Repot är fortfarande privat.** En vanlig användares uppdateringskontroll kommer därför inte åt källan. Programmet visar detta begripligt och fungerar i övrigt utan nätåtkomst. Repot måste uttryckligen göras publikt senare för att denna källa ska fungera utan inloggning. Tomma kanalposter betyder att ingen version har publicerats i den kanalen.
+**Repot är publikt.** Uppdateringsfiler och officiella paket kan hämtas utan inloggning. Programmet fungerar även utan nätåtkomst. Den stabila kanalen är tills vidare tom; välj **Förhandsversioner** i inställningarna för att få erbjudanden från förhandskanalen. En tom kanalpost betyder att ingen version har publicerats i den kanalen. En redan installerad 3.6.0 erbjuds inte samma version igen.
 
 Vid start kan programmet söka efter en nyare version. Automatisk kontroll kan stängas av under Arbetsflöde. Hämtning och installation kräver användarens val. Ingen installation påbörjas under läsning eller med en sparad återställning som väntar.
 
@@ -33,6 +33,6 @@ Detta är **paketverifiering**, inte Windows Authenticode eller Apple Developer 
    ```
 
 3. Kontrollera att arkivens hash stämmer mot GitHub, uppdatera källfilernas kontrollsummor och skicka kanalfilen genom granskning till `main`. Flytta inte en befintlig release till annat innehåll efter publicering.
-4. Ge ut en stabil kanal först efter avsedd acceptanskontroll med riktig läsare. Kanalval påverkar bara uppdateringar, aldrig nummerformat eller sparad profil.
+4. Ge ut en stabil kanal först efter avsedd acceptanskontroll med riktig läsare. Behåll förhandsutgåvan och skapa en separat stabil utgåva med samma verifierade paket om ingen kod ändrats. Om koden ändras, höj versionsnumret så att redan installerade förhandsversioner erbjuds uppdateringen. Kanalval påverkar bara uppdateringar, aldrig nummerformat eller sparad profil.
 
 Nyckeln skapades lokalt utanför arbetsmappen och ska säkerhetskopieras privat av projektägaren. Den får inte läggas i Git, releasearkiv, loggar eller ärenden. Förlorad nyckel kräver en särskild plan för nyckelbyte; det räcker inte att byta den publika nyckeln i en kanalfil. Konton som kan ändra utgåvor bör skyddas väl. En publik kontrollsumma ensam ersätter inte signaturen.

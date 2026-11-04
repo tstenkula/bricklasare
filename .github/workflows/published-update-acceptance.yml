@@ -1,0 +1,62 @@
+name: Published update acceptance
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - tools/test-published-update.ps1
+      - tools/test-published-mac-update.py
+      - .github/workflows/published-update-acceptance.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: published-update-acceptance-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  windows:
+    name: Published Windows 3.5.2 to 3.6.0
+    if: github.repository == 'tstenkula/bricklasare' && (github.event_name == 'workflow_dispatch' || (github.event.pull_request.head.repo.full_name == 'tstenkula/bricklasare' && github.event.pull_request.base.repo.full_name == 'tstenkula/bricklasare' && github.head_ref != ''))
+    runs-on: windows-2022
+    timeout-minutes: 12
+    steps:
+      - name: Check out acceptance tools
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Verify and install the actual public packages
+        shell: powershell
+        run: tools/test-published-update.ps1 -InstallOnDisposableRunner -OutputDirectory '${{ runner.temp }}\published-windows-report'
+      - name: Retain Windows acceptance evidence
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: published-windows-update-acceptance
+          path: ${{ runner.temp }}\published-windows-report
+          if-no-files-found: warn
+          retention-days: 3
+
+  macos:
+    name: Published Mac 3.5.2 to 3.6.0
+    if: github.repository == 'tstenkula/bricklasare' && (github.event_name == 'workflow_dispatch' || (github.event.pull_request.head.repo.full_name == 'tstenkula/bricklasare' && github.event.pull_request.base.repo.full_name == 'tstenkula/bricklasare' && github.head_ref != ''))
+    runs-on: macos-15
+    timeout-minutes: 15
+    steps:
+      - name: Check out acceptance tools
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Verify and install the actual public packages
+        run: python3 tools/test-published-mac-update.py
+      - name: Retain Mac acceptance evidence
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: published-mac-update-acceptance
+          path: |
+            ${{ runner.temp }}/bricklasare-published-mac-update/*.json
+            ${{ runner.temp }}/bricklasare-published-mac-update/*.log
+          if-no-files-found: warn
+          retention-days: 3

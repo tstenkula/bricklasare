@@ -6,7 +6,7 @@ Tobtech maintains the newest published Brickläsaren preview. Until real-reader 
 
 Do not post tag numbers, reader profiles, private keys, logs containing personal data, or exploit details in a public issue.
 
-When this repository is public and private vulnerability reporting is enabled, use **Security → Report a vulnerability**. While it is private, contact the repository owner through your existing private contact channel. If you have no private channel, an issue may ask the owner to establish one, without including the vulnerability or sensitive details. Do not assume an ordinary issue is private after the repository becomes public.
+Use **Security → Report a vulnerability** to send a private report to the maintainer. Ordinary issues, pull requests and their attachments are public; do not put vulnerability details or sensitive data there.
 
 Include the app version, operating system, prerequisites, impact and a minimal reproduction using synthetic data. Test only systems and devices you own or are authorized to test.
 
@@ -25,9 +25,9 @@ Run `python3 tools/scan-secrets.py` to scan Git history and tracked working file
 
 Opt into the local pre-commit check with `git config --local core.hooksPath .githooks`. Local hooks and CI are useful checks, but do not replace server-enforced branch protection and can be bypassed by someone with write access.
 
-CI has read-only repository permissions, no private signing key, GitHub-hosted standard runners, pinned actions, execution time limits, cancellation of superseded jobs and short artifact retention. The repository has an Actions budget of zero additional spend; runs stop if included usage is exhausted. No paid security product is required.
+Build and test jobs have read-only repository permissions. CodeQL analysis of C#, C, Swift and Python additionally has permission to publish security findings, but cannot write source or releases. CI uses no private signing key, GitHub-hosted standard runners, pinned actions, execution time limits, cancellation of superseded jobs and short artifact retention. The repository retains an Actions budget of zero additional spend. Standard hosted runners are free for this public repository; no larger paid runners are configured. No paid security product is required.
 
-GitHub Free does not enforce protected branches/rulesets on this private personal repository. Native GitHub secret/code scanning and private vulnerability reporting have availability restrictions. Gitleaks and offline tests provide free checks now; enable eligible GitHub protections explicitly if the repository is later made public. The repository must not be made public merely to enable a check.
+The public repository uses GitHub Free branch protection with required Windows, macOS and secret checks, secret scanning with push protection, and private vulnerability reporting. External contributors need maintainer approval before their fork workflows run. These controls complement the local Gitleaks and offline tests. No paid security subscription is required.
 
 ## Release review
 
