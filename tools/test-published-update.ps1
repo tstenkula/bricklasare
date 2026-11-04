@@ -1,18 +1,43 @@
 ﻿#requires -Version 5.1
 [CmdletBinding()]
-param([switch]$InstallOnDisposableRunner, [string]$OutputDirectory)
+param(
+    [switch]$InstallOnDisposableRunner,
+    [string]$OutputDirectory,
+    [ValidateSet('historical', 'stable-3.6.1')][string]$Case = 'historical'
+)
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
+$Case = $Case.ToLowerInvariant()
 if ($PSVersionTable.PSEdition -ne 'Desktop' -or [Environment]::OSVersion.Platform -ne 'Win32NT') { throw 'Use Windows PowerShell 5.1.' }
 
 # A reproducible acceptance test of the actual, immutable published artifacts.
 # No source patching, replacement signing key, profile redirection, or policy change.
+$sourceVersion = '3.5.2'; $targetVersion = '3.6.0'; $channel = 'preview'
+$sourceTag = 'v3.5.2-preview.1'; $targetTag = 'v3.6.0-preview.1'
+$oldSize = 205960; $newSize = 213221
 $oldHash = '494c69f17980ff687e7758a4602f354967913fe9c3a385c28c83e9f549e87617'
 $newHash = 'b36e8878bad3fc7c96d99358d9e01ec58cf163e3c38363fbfbc4a7a2ef0bc496'
 $helperHash = '7764dd8e6b4f87aae24e1b628501ceee9a4d01cd473e45e3f0b33e09e6f4aec3'
 $feedHash = 'cc104420dc4e9ffdbd2ca2a7d9f5563beb4efda4616c9c2fab899e355b4313d3'
 $releaseBase = 'https://github.com/tstenkula/bricklasare/releases/download/'
 $feedUrl = 'https://raw.githubusercontent.com/tstenkula/bricklasare/136898a6df968a3e0a99b6333dbe8983e4d464c3/Updates/preview.feed'
+# The second case is intentionally unavailable until the real signed stable
+# fixture is committed. Its target bytes are verified by the pinned prior helper.
+$fixture = $null
+if ($Case -ceq 'stable-3.6.1') {
+    $sourceVersion = '3.6.0'; $targetVersion = '3.6.1'; $channel = 'stable'
+    $sourceTag = 'v3.6.0-preview.1'; $targetTag = 'v3.6.1'
+    $oldSize = 213221; $newSize = $null
+    $oldHash = 'b36e8878bad3fc7c96d99358d9e01ec58cf163e3c38363fbfbc4a7a2ef0bc496'
+    $helperHash = '1105c6f5590305e797f37849699baee8671ffdda12a604145624d88d8904dad5'
+    $newHash = $null; $feedHash = $null
+    $fixture = Join-Path $PSScriptRoot 'fixtures\published-stable-3.6.1.feed'
+    if (-not (Test-Path -LiteralPath $fixture -PathType Leaf)) { throw 'The reviewed signed 3.6.1 stable fixture is required.' }
+    $fixtureFile = Get-Item -LiteralPath $fixture -Force
+    if ($fixtureFile.Length -lt 1 -or $fixtureFile.Length -gt 65536 -or ($fixtureFile.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) { throw 'Invalid stable fixture file.' }
+}
+$oldUrl = $releaseBase + $sourceTag + '/Bricklasaren-' + $sourceVersion + '-Windows.zip'
+$newUrl = $releaseBase + $targetTag + '/Bricklasaren-' + $targetVersion + '-Windows.zip'
 $utf8 = New-Object Text.UTF8Encoding($false)
 $shell = Join-Path $PSHOME 'powershell.exe'
 $tempRoot = [IO.Path]::GetTempPath()
@@ -40,7 +65,7 @@ $gate = $null
 $helper = $null
 $job = $null
 $checks = New-Object 'Collections.Generic.List[string]'
-$result = [ordered]@{ From='3.5.2'; To='3.6.0'; Channel='preview'; OldPackageSha256=$oldHash; NewPackageSha256=$newHash; FeedSha256=$feedHash; OriginalHelperSha256=$helperHash; FullInstallRequested=[bool]$InstallOnDisposableRunner; Passed=$false; Checks=@(); Limitations=@('No physical reader test.', 'The normal app relaunch is intentionally stopped; this is not an interactive UI acceptance test.') }
+$result = [ordered]@{ Case=$Case; From=$sourceVersion; To=$targetVersion; Channel=$channel; OldPackageSha256=$oldHash; NewPackageSha256=$newHash; FeedSha256=$feedHash; OriginalHelperSha256=$helperHash; FullInstallRequested=[bool]$InstallOnDisposableRunner; Passed=$false; Checks=@(); Limitations=@('No physical reader test.', 'The normal app relaunch is intentionally stopped; this is not an interactive UI acceptance test.') }
 
 function Confirm([bool]$Condition, [string]$Name) {
     if (-not $Condition) { throw ('FAIL: ' + $Name) }
@@ -113,23 +138,43 @@ try {
     [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
     Add-Type -AssemblyName System.IO.Compression.FileSystem
     $oldArchive = Join-Path $work 'old.zip'; $newArchive = Join-Path $work 'new.zip'; $feed = Join-Path $work 'original.feed'
-    Download-Public ($releaseBase + 'v3.5.2-preview.1/Bricklasaren-3.5.2-Windows.zip') $oldArchive 52428800
-    Download-Public ($releaseBase + 'v3.6.0-preview.1/Bricklasaren-3.6.0-Windows.zip') $newArchive 52428800
-    Download-Public $feedUrl $feed 65536
-    Confirm ((Get-FileHash $oldArchive).Hash -ieq $oldHash) 'Anonymous download matches immutable 3.5.2 ZIP'
-    Confirm ((Get-FileHash $newArchive).Hash -ieq $newHash) 'Anonymous download matches immutable 3.6.0 ZIP'
-    Confirm ((Get-FileHash $feed).Hash -ieq $feedHash) 'Original signed 3.6.0 feed is unchanged'
+    if ($null -eq $fixture) {
+        Download-Public $feedUrl $feed 65536
+        Confirm ((Get-FileHash $feed).Hash -ieq $feedHash) 'Original signed 3.6.0 feed is unchanged'
+    } else {
+        Copy-Item -LiteralPath $fixture -Destination $feed
+        $feedHash = (Get-FileHash -LiteralPath $feed).Hash.ToLowerInvariant()
+        $result.FeedSha256 = $feedHash
+    }
+    # Metadata is constrained before download. Authenticity is established below
+    # by the original helper, before extracting or executing any target code.
+    $lines = [IO.File]::ReadAllLines($feed)
+    Confirm ($lines.Length -eq 3 -and $lines[0] -ceq 'BRICKLASARE-UPDATE-1') 'Expected signed feed envelope'
+    $payload = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($lines[1])) | ConvertFrom-Json
+    $asset = $payload.Windows
+    Confirm ($payload.Schema -eq 1 -and $payload.Channel -ceq $channel -and $asset.Version -ceq $targetVersion -and $asset.Url -ceq $newUrl) 'Feed describes exactly the selected target release'
+    Confirm (($asset.Size -is [int] -or $asset.Size -is [long]) -and $asset.Size -gt 0 -and $asset.Size -le 52428800 -and $asset.Sha256 -cmatch '\A[a-f0-9]{64}\z') 'Target size and SHA-256 are bounded'
+    if ($Case -ceq 'historical') {
+        Confirm ($asset.Size -eq $newSize -and $asset.Sha256 -ceq $newHash) 'Historical feed retains reviewed package pins'
+    } else {
+        $newSize = [long]$asset.Size; $newHash = [string]$asset.Sha256
+        $result.NewPackageSha256 = $newHash
+    }
+    Download-Public $oldUrl $oldArchive $oldSize
+    Download-Public $newUrl $newArchive $newSize
+    Confirm ((Get-Item -LiteralPath $oldArchive).Length -eq $oldSize -and (Get-FileHash $oldArchive).Hash -ieq $oldHash) ('Anonymous download matches immutable ' + $sourceVersion + ' ZIP')
+    Confirm ((Get-Item -LiteralPath $newArchive).Length -eq $newSize -and (Get-FileHash $newArchive).Hash -ieq $newHash) ('Anonymous download matches ' + $targetVersion + ' feed metadata')
     $target = Join-Path $work 'installed app'; $expected = Join-Path $work 'expected-new'
     [IO.Compression.ZipFile]::ExtractToDirectory($oldArchive, $target)
-    [IO.Compression.ZipFile]::ExtractToDirectory($newArchive, $expected)
     $oldHelper = Join-Path $target 'Program\Install-Update.ps1'
-    Confirm ((Get-FileHash $oldHelper).Hash -ieq $helperHash) 'Original 3.5.2 installer is unmodified'
+    Confirm ((Get-FileHash $oldHelper).Hash -ieq $helperHash) ('Original ' + $sourceVersion + ' installer is unmodified')
     $verify = Join-Path $work 'verify'; [void][IO.Directory]::CreateDirectory($verify)
     $verifyPlan = Join-Path $verify 'plan.json'
-    [IO.File]::WriteAllText($verifyPlan, '{"Channel":"preview"}', $utf8)
+    [IO.File]::WriteAllText($verifyPlan, (@{ Channel=$channel } | ConvertTo-Json -Compress), $utf8)
     Copy-Item -LiteralPath $feed -Destination (Join-Path $verify 'release.feed')
     Copy-Item -LiteralPath $newArchive -Destination (Join-Path $verify 'package.zip')
-    Verify-OriginalHelper 'Original signature and package accepted by 3.5.2' $true
+    Verify-OriginalHelper ('Original signature and package accepted by ' + $sourceVersion) $true
+    [IO.Compression.ZipFile]::ExtractToDirectory($newArchive, $expected)
     $changed = [IO.File]::ReadAllBytes($newArchive); $changed[$changed.Length - 1] = $changed[$changed.Length - 1] -bxor 1
     [IO.File]::WriteAllBytes((Join-Path $verify 'package.zip'), $changed)
     Verify-OriginalHelper 'Tampered published package is rejected' $false
@@ -147,7 +192,7 @@ try {
         $sentinels = @{
             'formatval.json' = '{"Mode":"Kombi","RcoChip":"M"}'
             'utseende.json' = '{"Schema":1,"Organization":"","Subtitle":"","AccentHex":"#003B55","LogoFile":""}'
-            'arbetsflode.json' = '{"Copy":0,"Sounds":false,"Channel":"preview","AutoCheck":false}'
+            'arbetsflode.json' = ('{"Copy":0,"Sounds":false,"Channel":"' + $channel + '","AutoCheck":false}')
             'acceptance-sentinel.txt' = 'Synthetic acceptance settings; no reader or card data.'
         }
         foreach ($name in $sentinels.Keys) { [IO.File]::WriteAllText((Join-Path $data $name), $sentinels[$name], $utf8) }
@@ -194,7 +239,7 @@ namespace Tobtech.Acceptance {
         $job = New-Object Tobtech.Acceptance.OwnedJob
         $gate = New-TestProcess '-NoProfile -NonInteractive -Command "Start-Sleep -Seconds 180"'
         $plan = Join-Path $stage 'plan.json'
-        [IO.File]::WriteAllText($plan, (@{ Target=$target; Stage=(Join-Path $stage 'package'); ParentId=$gate.Id; Data=$data; Channel='preview' } | ConvertTo-Json), $utf8)
+        [IO.File]::WriteAllText($plan, (@{ Target=$target; Stage=(Join-Path $stage 'package'); ParentId=$gate.Id; Data=$data; Channel=$channel } | ConvertTo-Json), $utf8)
         $helper = New-TestProcess ('-NoProfile -NonInteractive -File ' + (Quote-Path (Join-Path $stage 'Install-Update.ps1')) + ' -Plan ' + (Quote-Path $plan))
         $helperOut = $helper.StandardOutput.ReadToEndAsync(); $helperErr = $helper.StandardError.ReadToEndAsync()
         $job.Add($helper)
@@ -204,13 +249,13 @@ namespace Tobtech.Acceptance {
         $job.Dispose(); $job = $null
         if (-not $helperOut.Wait(10000) -or -not $helperErr.Wait(10000)) { throw 'Installer child output did not close after terminating the owned job.' }
         [IO.File]::WriteAllText((Join-Path $OutputDirectory 'full-installer.log'), $helperOut.Result + $helperErr.Result, $utf8)
-        Confirm ($exit -eq 0) 'Unmodified 3.5.2 helper completes the real 3.6.0 installation'
+        Confirm ($exit -eq 0) ('Unmodified ' + $sourceVersion + ' helper completes the real ' + $targetVersion + ' installation')
         $status = Join-Path $data 'uppdatering-status.txt'; $selfTest = Join-Path $data 'sjalvtest-reception.txt'
         Copy-Item -LiteralPath $status -Destination (Join-Path $OutputDirectory 'installer-status.txt')
         Copy-Item -LiteralPath $selfTest -Destination (Join-Path $OutputDirectory 'installed-self-test.txt')
         Confirm ([IO.File]::ReadAllText($status).StartsWith('Uppdatering installerad.')) 'Installer reports a completed installation'
-        Confirm ([IO.File]::ReadAllText($selfTest).Contains('3.6.0') -and [IO.File]::ReadAllText($selfTest).Contains('tester av inställningar och resurshantering godkända.')) 'Published new application passes its actual offline self-tests'
-        Confirm (Same-Manifest $newFiles (File-Manifest $target)) 'Installed files exactly match the published 3.6.0 ZIP'
+        Confirm ([IO.File]::ReadAllText($selfTest).Contains($targetVersion) -and [IO.File]::ReadAllText($selfTest).Contains('tester av inställningar och resurshantering godkända.')) 'Published new application passes its actual offline self-tests'
+        Confirm (Same-Manifest $newFiles (File-Manifest $target)) ('Installed files exactly match the published ' + $targetVersion + ' ZIP')
         $backups = @(Get-ChildItem -LiteralPath $work -Directory | Where-Object { $_.Name -like 'installed app.previous-*' })
         Confirm ($backups.Count -eq 1 -and (Same-Manifest $oldFiles (File-Manifest $backups[0].FullName))) 'Previous installation is preserved byte for byte as a backup'
         foreach ($name in $settingsBefore.Keys) { Confirm ((Get-FileHash -LiteralPath (Join-Path $data $name)).Hash -ceq $settingsBefore[$name]) ('Personal setting preserved: ' + $name) }
