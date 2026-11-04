@@ -36,3 +36,9 @@ Detta är **paketverifiering**, inte Windows Authenticode eller Apple Developer 
 4. Ge ut en stabil kanal först efter avsedd acceptanskontroll med riktig läsare. Behåll förhandsutgåvan och skapa en separat stabil utgåva med samma verifierade paket om ingen kod ändrats. Om koden ändras, höj versionsnumret så att redan installerade förhandsversioner erbjuds uppdateringen. Kanalval påverkar bara uppdateringar, aldrig nummerformat eller sparad profil.
 
 Nyckeln skapades lokalt utanför arbetsmappen och ska säkerhetskopieras privat av projektägaren. Den får inte läggas i Git, releasearkiv, loggar eller ärenden. Förlorad nyckel kräver en särskild plan för nyckelbyte; det räcker inte att byta den publika nyckeln i en kanalfil. Konton som kan ändra utgåvor bör skyddas väl. En publik kontrollsumma ensam ersätter inte signaturen.
+
+## Prov av publicerade paket
+
+GitHub Actions-flödet **Published update acceptance** provar den publicerade installationshjälpen från 3.5.2 mot de oförändrade, signerade 3.6.0-paketen. Det körs manuellt eller vid ändringar i provets egna filer på en gren i detta repo. Historisk kanalfil och äldre paket är låsta till sina kontrollerade versioner så att ett senare versionssläpp inte ändrar provet.
+
+Provet använder tillfälliga Windows- och Apple Silicon-datorer hos GitHub, syntetiska inställningar och inga läsare. Det avvisar befintliga användardata och körs inte på personliga eller egna servrar. Installation, bevarade inställningar och tidigare programmapp kontrolleras; Mac kontrollerar även normal omstart. Hämtningen startas av provverktyget, så detta är inte ett klickprov av hela uppdateringsdialogen. Det ersätter inte hårdvaruproven i [IT/Verifiering.txt](../IT/Verifiering.txt).

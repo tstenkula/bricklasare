@@ -28,6 +28,8 @@ import xml.etree.ElementTree as ET
 REPO = 'tstenkula/bricklasare'
 SOURCE = '3.5.2'
 TARGET = '3.6.0'
+FEED_COMMIT = '136898a6df968a3e0a99b6333dbe8983e4d464c3'
+FEED_SHA256 = 'cc104420dc4e9ffdbd2ca2a7d9f5563beb4efda4616c9c2fab899e355b4313d3'
 SOURCE_SHA256 = '7714bbc5bc869a2835aa3ee6ce719077da6b3fbcdf0e7fc15be7b7611bfd3e6f'
 HOSTS = {'github.com', 'api.github.com', 'raw.githubusercontent.com',
          'release-assets.githubusercontent.com', 'objects.githubusercontent.com'}
@@ -190,7 +192,8 @@ def main():
               'scope': 'Published packages and actual installer on disposable Apple Silicon runner; no reader/tag or OS publisher-warning test.'}
     owned_roots = (work, data.resolve())
     try:
-        envelope = download(f'https://raw.githubusercontent.com/{REPO}/main/Updates/preview.feed', 65_536)
+        envelope = download(f'https://raw.githubusercontent.com/{REPO}/{FEED_COMMIT}/Updates/preview.feed', 65_536)
+        require(hashlib.sha256(envelope).hexdigest() == FEED_SHA256, 'Original signed 3.6.0 feed changed.')
         offered = verify_feed(envelope)
         old_asset, old_zip = published(SOURCE)
         new_asset, new_zip = published(TARGET)
