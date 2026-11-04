@@ -2,7 +2,7 @@
 
 Programmen hämtar en liten, signerad uppdateringsfil från `https://raw.githubusercontent.com/tstenkula/bricklasare/main/Updates/stable.feed` eller `preview.feed`. Där anges version, storlek, SHA-256 och en GitHub Release-adress för respektive plattform. Inga GitHub-token eller behörighetskoder lagras i programmen.
 
-**Repot är fortfarande privat.** En vanlig användares uppdateringskontroll kommer därför inte åt källan. Programmet visar detta begripligt och fungerar i övrigt utan nätåtkomst. Repot måste uttryckligen göras publikt senare för att denna källa ska fungera utan inloggning. Tomma kanalposter betyder att ingen version har publicerats i den kanalen.
+**Repot är publikt.** Uppdateringsfiler och officiella paket kan hämtas utan inloggning. Programmet fungerar även utan nätåtkomst. Välj **Stabil** för stabila utgåvor eller **Förhandsversioner** för förhandskanalen. En tom kanalpost betyder att ingen version har publicerats i den kanalen. Bara högre versionsnummer erbjuds; 3.6.1 kan därför uppdatera en installerad 3.6.0. Hårdvaruprov med fysisk läsare återstår även för den första stabila utgåvan.
 
 Vid start kan programmet söka efter en nyare version. Automatisk kontroll kan stängas av under Arbetsflöde. Hämtning och installation kräver användarens val. Ingen installation påbörjas under läsning eller med en sparad återställning som väntar.
 
@@ -29,10 +29,16 @@ Detta är **paketverifiering**, inte Windows Authenticode eller Apple Developer 
 2. Signera kanalfilen lokalt med `tools/release.py`. Exempel:
 
    ```sh
-   python3 tools/release.py --key /secure/path/update-signing.pem --channel preview --version 3.6.0 --tag v3.6.0-preview.1 --windows dist/Bricklasaren-3.6.0-Windows.zip --mac dist/Bricklasaren-3.6.0-macOS-AppleSilicon.zip --output Updates/preview.feed
+   python3 tools/release.py --key /secure/path/update-signing.pem --channel stable --version 3.6.1 --tag v3.6.1 --windows dist/Bricklasaren-3.6.1-Windows.zip --mac dist/Bricklasaren-3.6.1-macOS-AppleSilicon.zip --output Updates/stable.feed
    ```
 
 3. Kontrollera att arkivens hash stämmer mot GitHub, uppdatera källfilernas kontrollsummor och skicka kanalfilen genom granskning till `main`. Flytta inte en befintlig release till annat innehåll efter publicering.
-4. Ge ut en stabil kanal först efter avsedd acceptanskontroll med riktig läsare. Kanalval påverkar bara uppdateringar, aldrig nummerformat eller sparad profil.
+4. Dokumentera vilka acceptanskontroller som är genomförda och vilka som återstår innan projektägaren godkänner en stabil utgåva. För 3.6.1 återstår fysisk provkörning; detta ska stå i utgåvans information. Behåll förhandsutgåvan och skapa en separat stabil utgåva med samma verifierade paket om ingen kod ändrats. Om koden ändras, höj versionsnumret så att redan installerade förhandsversioner erbjuds uppdateringen. Kanalval påverkar bara uppdateringar, aldrig nummerformat eller sparad profil.
 
 Nyckeln skapades lokalt utanför arbetsmappen och ska säkerhetskopieras privat av projektägaren. Den får inte läggas i Git, releasearkiv, loggar eller ärenden. Förlorad nyckel kräver en särskild plan för nyckelbyte; det räcker inte att byta den publika nyckeln i en kanalfil. Konton som kan ändra utgåvor bör skyddas väl. En publik kontrollsumma ensam ersätter inte signaturen.
+
+## Prov av publicerade paket
+
+GitHub Actions-flödet **Published update acceptance** provar den publicerade installationshjälpen från 3.5.2 mot de oförändrade, signerade 3.6.0-paketen. Det körs manuellt eller vid ändringar i provets egna filer på en gren i detta repo. Historisk kanalfil och äldre paket är låsta till sina kontrollerade versioner så att ett senare versionssläpp inte ändrar provet.
+
+Provet använder tillfälliga Windows- och Apple Silicon-datorer hos GitHub, syntetiska inställningar och inga läsare. Det avvisar befintliga användardata och körs inte på personliga eller egna servrar. Installation, bevarade inställningar och tidigare programmapp kontrolleras; Mac kontrollerar även normal omstart. Hämtningen startas av provverktyget, så detta är inte ett klickprov av hela uppdateringsdialogen. Det ersätter inte hårdvaruproven i [IT/Verifiering.txt](../IT/Verifiering.txt).

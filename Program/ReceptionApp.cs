@@ -216,7 +216,7 @@ namespace Tobtech.OmnikeyRco
 
             string iconPath = Path.Combine(ReceptionFiles.PackagePath, "Program", "Bricklasaren.ico");
             if (File.Exists(iconPath)) { try { using (Icon source = new Icon(iconPath)) appIcon = (Icon)source.Clone(); Icon = appIcon; } catch (ArgumentException) { } catch (IOException) { } catch (UnauthorizedAccessException) { } }
-            Text = "Brickläsaren · 3.6.0";
+            Text = "Brickläsaren · 3.6.1";
             Font = Ui.GetFont(10F); ForeColor = Ui.Ink; BackColor = Ui.Paper;
             AutoScaleMode = AutoScaleMode.Dpi; AutoScaleDimensions = new SizeF(96F, 96F);
             StartPosition = FormStartPosition.CenterScreen;
@@ -254,6 +254,7 @@ namespace Tobtech.OmnikeyRco
             read.TabIndex = 0; cancel.TabIndex = 1; setup.TabIndex = 2;
             read.AccessibleDescription = "Starta en läsning med Ctrl+R."; cancel.AccessibleDescription = "Avbryt läsningen med Escape.";
             actions.Controls.Add(read); actions.Controls.Add(cancel); actions.Controls.Add(setup); statusPanel.Controls.Add(actions, 1, 0); Ui.Add(root, statusPanel);
+            InitializeUpdateProgress(root);
             TableLayoutPanel resultHeader = new TableLayoutPanel { Dock = DockStyle.Top, AutoSize = true, ColumnCount = 3, Margin = new Padding(0, 0, 0, 8), TabIndex = 2 };
             resultHeader.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
             resultHeader.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize)); resultHeader.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
@@ -314,7 +315,7 @@ namespace Tobtech.OmnikeyRco
                 e.Cancel = true; RequestCancel();
                 notice.Text = "Låt programmet arbeta klart. Stäng sedan fönstret igen.";
             };
-            log.Add("Receptionsgränssnitt 3.6.0 (PowerShell). Lokal diagnostik utan råa kortdata.");
+            log.Add("Receptionsgränssnitt 3.6.1 (PowerShell). Lokal diagnostik utan råa kortdata.");
             ApplyAppearance(); ApplyModeUi(); UpdateButtons(); ResumeLayout(true);
             if (previewOnly) connection.Text = "Förhandsvisning · ingen läsarkontakt";
         }
@@ -478,6 +479,12 @@ namespace Tobtech.OmnikeyRco
             // Native file dialogs pump Windows messages. A reconnect may have started
             // while the dialog was open; only claim an operation after it has closed.
             if (busy || IsDisposed || Disposing || (requiresReader && !IsReady)) return false;
+            SetBusy(true); return true;
+        }
+        private bool TryBeginReaderOperation(ReaderClient expected, bool needsRecovery)
+        {
+            if (busy || reconnectPending || IsDisposed || Disposing || expected == null || !Object.ReferenceEquals(reader, expected) ||
+                !expected.Connected || expected.HasPendingRecovery != needsRecovery) return false;
             SetBusy(true); return true;
         }
         private void ClearDisplayedResults()
@@ -782,12 +789,14 @@ namespace Tobtech.OmnikeyRco
         private async Task Recover()
         {
             if (busy || reader == null || !reader.HasPendingRecovery) return;
+            ReaderClient active = reader;
             if (MessageBox.Show(this, "Ta bort alla brickor och låt USB-kabeln sitta i. Återställa läsaren nu?", "Återställ läsaren", MessageBoxButtons.OKCancel, MessageBoxIcon.Information) != DialogResult.OK) return;
-            ClearResults(); outputProtected = false; SetBusy(true); SetInstruction("ÅTERSTÄLLER", "Håll brickorna borta", "Låt läsaren vara inkopplad tills detta är klart.", false);
+            if (!TryBeginReaderOperation(active, true)) return;
             try
             {
-                await Task.Run(delegate { reader.Recover(); });
-                reader = await Task.Run(delegate { return ReaderSafety.EnsureProtected(reader, address, ReceptionFiles.DataPath, log, PreparationProgress); });
+                ClearResults(); outputProtected = false; SetInstruction("ÅTERSTÄLLER", "Håll brickorna borta", "Låt läsaren vara inkopplad tills detta är klart.", false);
+                await Task.Run(delegate { active.Recover(); });
+                reader = await Task.Run(delegate { return ReaderSafety.EnsureProtected(active, address, ReceptionFiles.DataPath, log, PreparationProgress); });
                 outputProtected = true; ReadyMessage();
             }
             catch (Exception ex) { SaveError(ex); SetInstruction("HJÄLP BEHÖVS", "Återställningen är inte klar", "Låt läsaren vara inkopplad. Spara en felrapport via Hjälp och kontakta IT.", true); }
@@ -838,12 +847,17 @@ namespace Tobtech.OmnikeyRco
         }
         private async Task ImportProfile()
         {
-            if (reader == null || reader.HasPendingRecovery) return;
+            if (busy || reader == null || reader.HasPendingRecovery) return;
+            ReaderClient expected = reader;
             using (OpenFileDialog d = new OpenFileDialog { Filter = "Läsarprofil (*.json)|*.json", Title = "Importera verifierad läsarprofil" })
             {
                 if (d.ShowDialog(this) != DialogResult.OK) return;
-                try { ReceptionFiles.ImportProfile(reader, d.FileName); await ConnectReader(); }
+                if (!TryBeginReaderOperation(expected, false)) return;
+                bool imported = false;
+                try { ReceptionFiles.ImportProfile(expected, d.FileName); imported = true; }
                 catch (Exception ex) { SaveError(ex); MessageBox.Show(this, ex.Message, "Profilen kunde inte importeras", MessageBoxButtons.OK, MessageBoxIcon.Warning); }
+                finally { SetBusy(false); }
+                if (imported) await ConnectReader();
             }
         }
         private void CreateDesktopShortcut()
@@ -881,14 +895,15 @@ namespace Tobtech.OmnikeyRco
         private async Task RestoreOriginalUsbMode()
         {
             if (busy || reader == null || reader.HasPendingRecovery) return;
+            ReaderClient active = reader;
             string description = "Läsaren återgår till USB-läget som sparades före den automatiska förberedelsen. Den kan då börja skriva kortnummer i aktiva Windows-fönster igen.\r\n\r\nBrickläsaren avslutas efter återställningen. Nästa gång du startar programmet aktiveras skyddet automatiskt igen.\r\n\r\nÅterställa och avsluta?";
             if (MessageBox.Show(this, description, "Återställ tidigare USB-läge (IT)", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes) return;
-            ClearResults(); outputProtected = false; SetBusy(true);
-            SetInstruction("IT-INSTÄLLNING", "Startar om USB-läsaren", "Låt USB-kabeln sitta kvar. Inga brickor ska ligga mot läsaren.", false);
+            if (!TryBeginReaderOperation(active, false)) return;
             bool restored = false;
             try
             {
-                ReaderClient active = reader;
+                ClearResults(); outputProtected = false;
+                SetInstruction("IT-INSTÄLLNING", "Startar om USB-läsaren", "Låt USB-kabeln sitta kvar. Inga brickor ska ligga mot läsaren.", false);
                 reader = await Task.Run(delegate { return ReaderSafety.RestoreOriginalMode(active, address, ReceptionFiles.DataPath, log, PreparationProgress); });
                 restored = true;
             }
@@ -1002,7 +1017,7 @@ namespace Tobtech.OmnikeyRco
             Button test = ActionButton("Kontrollera referensbricka", "Reference"); test.Enabled = protectedOutput && connected && !pending;
             Button restore = ActionButton("Återställ läsaren", "Recover"); restore.Enabled = pending;
             service.Controls.Add(test); service.Controls.Add(restore); Ui.Add(advanced, service);
-            Ui.Add(advanced, Ui.Label("Version 3.6.0 · PowerShell · Programmet läser bricknummer.\r\nTobtech", 9F, false));
+            Ui.Add(advanced, Ui.Label("Version 3.6.1 · PowerShell · Programmet läser bricknummer.\r\nTobtech", 9F, false));
             more.Click += delegate
             {
                 advanced.Visible = !advanced.Visible;

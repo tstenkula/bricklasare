@@ -1,4 +1,4 @@
-import Foundation
+import AppKit
 import Darwin
 
 extension SelfTests {
@@ -95,6 +95,74 @@ extension SelfTests {
       "Absent second output is not copied")
     let controller = AppController(store: store, preview: true)
     controller.makeWindow()
+    controller.workflow.channel = "preview"
+    let readerOperation = CancelToken()
+    controller.busy = true
+    controller.token = readerOperation
+    controller.instruction = "Pågående läsning"
+    controller.outputs = ("123", "456")
+    try check(try !controller.beginConfirmedUpdate(asset),
+      "Reader work started during update confirmation prevents update staging")
+    try check(controller.busy && controller.token === readerOperation
+      && controller.instruction == "Pågående läsning" && controller.outputs?.0 == "123",
+      "Rejected update cannot release or overwrite another operation's state")
+    controller.shortcutCancel()
+    try check(readerOperation.cancelled && controller.busy && controller.outputs == nil,
+      "Escape still cancels an active scan and immediately clears its results")
+    controller.outputs = ("123", "456")
+    controller.busy = false
+    controller.token = nil
+    controller.workflow.channel = "stable"
+    try check(try !controller.beginConfirmedUpdate(asset) && !controller.busy
+      && controller.outputs?.0 == "123", "Changed channel invalidates a previously offered update")
+    controller.workflow.channel = "preview"
+    try store.writeData("aterstall-confirmation-test.json", Data("pending".utf8))
+    try rejects("Recovery started during confirmation blocks update acquisition") {
+      _ = try controller.beginConfirmedUpdate(asset)
+    }
+    try check(!controller.busy && controller.outputs?.0 == "123",
+      "New recovery journal blocks staging before UI state is changed")
+    try store.remove("aterstall-confirmation-test.json")
+    controller.info = nil
+    controller.reconnectPending = true
+    try check(try controller.beginConfirmedUpdate(asset) && controller.busy
+      && controller.outputs == nil,
+      "Confirmed update remains available offline and clears results when it owns the operation")
+    let updateOperation = controller.updateOperation!
+    controller.shortcutCancel()
+    try check(controller.updateOperation == updateOperation && controller.busy && controller.notice.isEmpty,
+      "Escape cannot claim to cancel an update that has no scan cancellation token")
+    try check(!controller.windowShouldClose(controller.window)
+      && controller.applicationShouldTerminate(NSApp) == .terminateCancel
+      && controller.notice.contains("Uppdateringen pågår") && controller.updateOperation == updateOperation,
+      "Close and quit describe the active update and preserve its ownership")
+    controller.showUpdateProgress(.downloading(received: 740000, total: 2000000), operation: updateOperation)
+    try check(controller.updateProgress?.percentage == 37
+      && controller.readerView?.updateLabel.stringValue == "37 % · 0,7 av 2,0 MB"
+      && controller.readerView?.updateBar.isHidden == false
+      && controller.readerView?.results.isHidden == true,
+      "Download progress shows actual signed-size percentage and megabytes without card results")
+    controller.showUpdateProgress(.verifying, operation: UUID())
+    try check(controller.updateProgress?.percentage == 37 && !controller.finishUpdateOperation(UUID())
+      && controller.busy, "Stale progress and completion cannot change the active update")
+    controller.invalidateConnection()
+    controller.readyMessage()
+    try check(controller.instruction == "Hämtar uppdateringen" && controller.busy,
+      "Reader invalidation cannot replace an active update's instruction")
+    controller.showUpdateProgress(.verifying, operation: updateOperation)
+    try check(controller.updateProgress?.fraction == nil && controller.readerView?.updateBar.isHidden == true
+      && controller.readerView?.updateSpinner.isHidden == false,
+      "Verification has no invented percentage or installation-complete state")
+    controller.showUpdateProgress(.installing, operation: updateOperation)
+    try check(controller.instruction == "Förbereder installationen" && controller.updateProgress?.fraction == nil,
+      "Preparing installation is distinct from download completion")
+    try check(controller.finishUpdateOperation(updateOperation) && !controller.busy,
+      "Only the owning update releases busy state")
+    controller.readyMessage(); controller.rebuild()
+    controller.showUpdateProgress(.downloading(received: 2000000, total: 2000000), operation: updateOperation)
+    try check(controller.updateProgress == nil && controller.readerView?.updatePanel.isHidden == true,
+      "Late download callbacks cannot resurrect finished progress")
+    controller.reconnectPending = false
     controller.outputs = ("123", "456")
     controller.info = ReaderInfo(
       board: "mock", id: "", firmware: "", profile: "Standardformat", pending: false, ready: true)
@@ -103,6 +171,53 @@ extension SelfTests {
       controller.outputs == nil && controller.info == nil && controller.reconnectPending,
       "USB/wake invalidation removes results and readiness")
     controller.window.close()
+    var progressTime = 0.0
+    var receivedReports: [(Int, Int)] = []
+    let download = UpdateDownload(200, expectedSize: 100,
+      progress: { receivedReports.append(($0, $1)) }, clock: { progressTime })
+    download.reportProgress(force: true)
+    try download.append(Data(repeating: 1, count: 10))
+    progressTime = 0.11
+    try download.append(Data(repeating: 1, count: 15))
+    progressTime = 0.12
+    try download.append(Data(repeating: 1, count: 75))
+    try check(receivedReports.map { $0.0 } == [0, 25],
+      "Full byte count alone cannot report completion before successful EOF")
+    download.complete(nil)
+    try check(receivedReports.map { $0.0 } == [0, 25, 100]
+      && receivedReports.allSatisfy { $0.1 == 100 },
+      "Progress is throttled to 10 Hz with actual-byte start and verified EOF completion")
+    try rejects("Signed package size bounds download before progress or buffer growth") {
+      try download.append(Data([1]))
+    }
+    try check(download.bytes.count == 100 && receivedReports.count == 3,
+      "Oversized data cannot produce progress above signed size")
+    let responseURL = URL(string: "https://github.com/tstenkula/bricklasare")!
+    try download.validateResponse(HTTPURLResponse(url: responseURL, statusCode: 200,
+      httpVersion: "HTTP/1.1", headerFields: ["Content-Length": "100"])!)
+    try download.validateResponse(HTTPURLResponse(url: responseURL, statusCode: 200,
+      httpVersion: "HTTP/1.1", headerFields: [:])!)
+    try rejects("Known HTTP size cannot replace the signed package size") {
+      try download.validateResponse(HTTPURLResponse(url: responseURL, statusCode: 200,
+        httpVersion: "HTTP/1.1", headerFields: ["Content-Length": "99"])!)
+    }
+    for (size, error) in [(99, nil), (100, fail("TEST", "Synthetic transport error") as Error?)] {
+      var endedAtTotal = false
+      let partial = UpdateDownload(200, expectedSize: 100,
+        progress: { endedAtTotal = $0 == $1 })
+      try partial.append(Data(repeating: 1, count: size))
+      partial.complete(error)
+      try check(partial.failure != nil && !endedAtTotal,
+        "Short or failed transfer cannot report successful download completion")
+    }
+    try check(UpdateProgress.downloading(received: 29, total: 100).percentage == 29,
+      "Progress percentages do not round a true 29 percent down through floating-point error")
+    try check(UpdateProgress.downloading(received: 99, total: 100).percentage == 99,
+      "Incomplete download never rounds up to 100 percent")
+    try rejects("Invalid expected size is rejected before starting the network request") {
+      _ = try UpdateDownload.get(URL(string: "https://github.com/tstenkula/bricklasare")!,
+        maximum: 100, expectedSize: 101)
+    }
     let target = store.url("old.app")
     let candidate = store.url("new.app")
     let backup = store.url("backup.app")

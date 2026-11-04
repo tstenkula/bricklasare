@@ -8,6 +8,10 @@ The interface is Swedish. Supported output formats are **RCO – MIFARE + EM (mR
 
 **Source available, not open source.** Private personal noncommercial use of official releases is free. Commercial, professional and organizational use requires a separate paid written license from Tobtech. Redistribution, rebranding and reuse in other products are restricted. Inspection, issues and proposed fixes are welcome under [LICENSE.txt](LICENSE.txt) and [CONTRIBUTING.md](CONTRIBUTING.md). No purchase or price is implied by downloading a release.
 
+## Release status
+
+[Official downloads](https://github.com/tstenkula/bricklasare/releases) are public and require no GitHub account. **3.6.1 is the stable release.** Automated tests cover both platforms, and the published 3.5.2 → 3.6.0 installers have passed isolated installation tests. **Physical OMNIKEY acceptance testing is still pending**, including first-use setup, actual tag numbers and recovery. See [the hardware checklist](IT/Verifiering.txt).
+
 ## Start
 
 - Windows: extract the complete ZIP and open `Starta-Bricklasaren.cmd`. Choose the access system on first use. If needed, the connection guide opens the [official EEM driver page](https://www.hidglobal.com/drivers/34881). Driver binaries are not bundled.
@@ -38,5 +42,7 @@ CI compiles both platforms, runs offline reader simulations, update verification
 Version 3.5.2 also verifies signed update metadata at installation, binds Windows reader traffic to the identified USB network adapter, and checks malformed native responses with memory sanitizers. Free local/CI secret scanning, release controls and remaining trust limits are documented in [SECURITY.md](SECURITY.md).
 
 Version 3.6.0 refines the reader workspace and result states, restores predictable keyboard focus, and avoids running the regression-test suite during normal Windows startup. Large custom logos use smaller display copies while the saved original is retained.
+
+Version 3.6.1 adds actual download progress and rechecks operation ownership after modal confirmation dialogs, so a reconnect cannot be overwritten by another operation.
 
 `SHA256SUMS.txt` covers repository files. Update feeds cover release archives. The release signing private key is never stored in this repository or in an application.

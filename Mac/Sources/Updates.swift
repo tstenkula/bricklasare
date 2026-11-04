@@ -18,10 +18,84 @@ struct UpdateFeed: Codable {
 struct UpdatePlan: Codable {
   let target: String, directory: String, parent: Int32, channel: String
 }
+enum UpdateProgress {
+  case downloading(received: Int, total: Int)
+  case verifying
+  case installing
+  var title: String {
+    switch self {
+    case .downloading: return "Hämtar uppdateringen"
+    case .verifying: return "Kontrollerar uppdateringen"
+    case .installing: return "Förbereder installationen"
+    }
+  }
+  var detail: String {
+    switch self {
+    case .downloading(let received, let total):
+      return String(format: "%d %% · %.1f av %.1f MB", percentage ?? 0,
+                    Double(received) / 1_000_000, Double(total) / 1_000_000)
+        .replacingOccurrences(of: ".", with: ",")
+    case .verifying: return "Hämtningen är klar. Kontrollerar filen innan installation."
+    case .installing: return "Appen startas om för att slutföra uppdateringen."
+    }
+  }
+  var fraction: Double? {
+    guard case .downloading(let received, let total) = self, total > 0 else { return nil }
+    return min(1, max(0, Double(received) / Double(total)))
+  }
+  var percentage: Int? {
+    guard case .downloading(let received, let total) = self, total > 0 else { return nil }
+    return min(total, max(0, received)) * 100 / total
+  }
+}
 final class UpdateDownload: NSObject, URLSessionDataDelegate {
   var bytes = Data(), failure: Error?
   let maximum: Int, done = DispatchSemaphore(value: 0)
-  init(_ maximum: Int) { self.maximum = maximum }
+  let expectedSize: Int?
+  private let progress: ((Int, Int) -> Void)?
+  private let clock: () -> TimeInterval
+  private var lastReport = -Double.infinity, lastReportedBytes = -1
+  private var completed = false
+  init(_ maximum: Int, expectedSize: Int? = nil, progress: ((Int, Int) -> Void)? = nil,
+       clock: @escaping () -> TimeInterval = { ProcessInfo.processInfo.systemUptime }) {
+    self.maximum = min(maximum, expectedSize ?? maximum)
+    self.expectedSize = expectedSize
+    self.progress = progress
+    self.clock = clock
+  }
+  func reportProgress(force: Bool = false) {
+    guard let total = expectedSize, let progress, bytes.count != lastReportedBytes else { return }
+    // Reaching the advertised byte count is not EOF: a server may still fail or send more data.
+    guard bytes.count < total || completed else { return }
+    let now = clock()
+    guard force || bytes.count == total || now - lastReport >= 0.1 else { return }
+    lastReport = now
+    lastReportedBytes = bytes.count
+    progress(bytes.count, total)
+  }
+  func append(_ data: Data) throws {
+    try require(data.count <= maximum - bytes.count, "Uppdateringsfilen är för stor.", code: "UPDATE_SIZE")
+    bytes.append(data)
+    reportProgress()
+  }
+  func validateResponse(_ response: URLResponse) throws {
+    try require((response as? HTTPURLResponse)?.statusCode == 200
+      && response.expectedContentLength <= maximum
+      && (expectedSize == nil || response.expectedContentLength < 0
+          || response.expectedContentLength == Int64(expectedSize!)),
+      Updates.unavailable, code: "UPDATE_SOURCE")
+  }
+  func complete(_ error: Error?) {
+    if failure == nil { failure = error }
+    if failure == nil, let expectedSize, bytes.count != expectedSize {
+      failure = fail("UPDATE_SIZE", "Uppdateringsfilens storlek stämmer inte.")
+    }
+    if failure == nil {
+      completed = true
+      reportProgress(force: true)
+    }
+    done.signal()
+  }
   static func allowed(_ url: URL) -> Bool {
     url.scheme == "https" && (url.port == nil || url.port == 443) && url.user == nil
       && url.password == nil
@@ -41,36 +115,36 @@ final class UpdateDownload: NSObject, URLSessionDataDelegate {
     _ session: URLSession, dataTask: URLSessionDataTask, didReceive response: URLResponse,
     completionHandler: @escaping (URLSession.ResponseDisposition) -> Void
   ) {
-    guard (response as? HTTPURLResponse)?.statusCode == 200,
-      response.expectedContentLength <= maximum
-    else {
-      failure = fail("UPDATE_SOURCE", Updates.unavailable)
+    do { try validateResponse(response) } catch {
+      failure = error
       completionHandler(.cancel)
       return
     }
     completionHandler(.allow)
   }
   func urlSession(_ session: URLSession, dataTask: URLSessionDataTask, didReceive data: Data) {
-    guard bytes.count + data.count <= maximum else {
-      failure = fail("UPDATE_SIZE", "Uppdateringsfilen är för stor.")
+    guard failure == nil else { return }
+    do { try append(data) } catch {
+      failure = error
       dataTask.cancel()
-      return
     }
-    bytes.append(data)
   }
   func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
-    if failure == nil { failure = error }
-    done.signal()
+    complete(error)
   }
-  static func get(_ url: URL, maximum: Int) throws -> Data {
+  static func get(_ url: URL, maximum: Int, expectedSize: Int? = nil,
+                  progress: ((Int, Int) -> Void)? = nil) throws -> Data {
     try require(allowed(url), "Otillåten uppdateringsadress.")
-    let download = UpdateDownload(maximum)
+    try require(maximum > 0 && (expectedSize.map { (1...maximum).contains($0) } ?? true),
+                "Ogiltig uppdateringsstorlek.")
+    let download = UpdateDownload(maximum, expectedSize: expectedSize, progress: progress)
     let config = URLSessionConfiguration.ephemeral
     config.timeoutIntervalForRequest = 30
     config.timeoutIntervalForResource = 180
     config.httpAdditionalHeaders = ["User-Agent": "Tobtech-Bricklasaren/" + Updates.current]
     let session = URLSession(configuration: config, delegate: download, delegateQueue: nil)
     defer { session.invalidateAndCancel() }
+    download.reportProgress(force: true)
     session.dataTask(with: url).resume()
     guard download.done.wait(timeout: .now() + 190) == .success else {
       throw fail("UPDATE_TIMEOUT", Updates.unavailable)
@@ -80,7 +154,7 @@ final class UpdateDownload: NSObject, URLSessionDataDelegate {
   }
 }
 enum Updates {
-  static let current = "3.6.0"
+  static let current = "3.6.1"
   static let publicKey =
     "MIIBigKCAYEAn8JTA0cbbRrraGNb11fX4Dyanoa8S9TzTBGl8Edfagx743HROUj9lDCwJvuVF6cNpH4mB2dN33O+XfYKZMrUaJ0K/3Q9gmPLqedlvbpuHWlEaeUzekdT4Npo7EZpwo+Cwcxjlmlahgoll1MkjEu8QERzAQEeuTB4vZCsKdXdYcRlKAQuPEKqCWkiH49prMDvVdqUUYLl2TPLcHPD8MDdkbFh/glWJDTRB1No++PCUU8PVG80X94BnMe1E/+LLyTjxaNYVSsIFZlD9XX3eup7t/UTKUk9RC1u8WY23l74ccXwy71lirntfOFW6MdK4kFsIGOk+2PF/QGwoIcpwfhSt7+Id0y85VGEqe002CngsfxUQ7BkAAAB2+D4vPcU3FBLkleYkG5B+WXasbCslTGFXG+hnFpTU2R5XQECRJ2UXjuJN/lDaw8AE7dwUTTfibfYGs9mAUZ6nECBsL3OmpXtCK9ZyTHx2AWs+hvXP+7hzcluf12K2H4MveyyNcOFSNedAgMBAAE="
   static let unavailable =
@@ -298,7 +372,8 @@ enum Updates {
     }
     try require(process.terminationStatus == 0, "Kontrollen av den nya versionen misslyckades.")
   }
-  static func stage(_ offered: UpdateAsset, store: Store) throws -> URL {
+  static func stage(_ offered: UpdateAsset, store: Store,
+                    progress: ((UpdateProgress) -> Void)? = nil) throws -> URL {
     let asset = try authenticated(offered)
     try require(!pending(store), "Återställ läsaren innan programmet uppdateras.")
     let target = Bundle.main.bundleURL.standardizedFileURL
@@ -310,9 +385,14 @@ enum Updates {
     try FileManager.default.createDirectory(
       at: directory, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
     do {
-      let bytes = try UpdateDownload.get(URL(string: asset.Url)!, maximum: 52_428_800)
+      let bytes = try UpdateDownload.get(URL(string: asset.Url)!, maximum: 52_428_800,
+        expectedSize: asset.Size) { received, total in
+          progress?(.downloading(received: received, total: total))
+        }
+      progress?(.verifying)
       try verify(bytes, asset: asset)
       try validateZip(bytes)
+      progress?(.installing)
       try bytes.write(to: directory.appendingPathComponent("package.zip"), options: .atomic)
       try asset.signedFeed!.write(to: directory.appendingPathComponent("release.feed"), options: .atomic)
       let plan = UpdatePlan(
@@ -460,14 +540,21 @@ extension AppController {
     alert.addButton(withTitle: "Hämta och installera")
     alert.addButton(withTitle: "Senare")
     guard alert.runModal() == .alertFirstButtonReturn else { return }
-    busy = true
-    clearResults()
-    instruction = "Hämtar och kontrollerar uppdateringen"
-    rebuild()
+    do {
+      guard try beginConfirmedUpdate(asset) else { return }
+    } catch {
+      showError(error)
+      return
+    }
+    guard let operation = updateOperation else { return }
     worker.async { [weak self] in
       guard let self else { return }
       do {
-        let plan = try Updates.stage(asset, store: self.store)
+        let plan = try Updates.stage(asset, store: self.store) { [weak self] progress in
+          DispatchQueue.main.async { [weak self] in
+            self?.showUpdateProgress(progress, operation: operation)
+          }
+        }
         try require(!Updates.pending(self.store), "Återställning väntar.")
         let helper = Process()
         helper.executableURL = plan.deletingLastPathComponent().appendingPathComponent("installer")
@@ -476,17 +563,46 @@ extension AppController {
         helper.standardError = FileHandle.nullDevice
         try helper.run()
         DispatchQueue.main.async {
-          self.busy = false
+          guard self.finishUpdateOperation(operation) else { return }
           NSApp.terminate(nil)
         }
       } catch {
         DispatchQueue.main.async {
-          self.busy = false
+          guard self.finishUpdateOperation(operation) else { return }
           self.readyMessage()
           self.rebuild()
           showError(error)
         }
       }
     }
+  }
+  func beginConfirmedUpdate(_ asset: UpdateAsset) throws -> Bool {
+    dispatchPrecondition(condition: .onQueue(.main))
+    // A modal alert runs a nested event loop. Recheck ownership after the answer,
+    // before scheduling work or changing another reader operation's busy state.
+    guard !busy, updateOperation == nil, asset.channel == workflow.channel else { return false }
+    try require(!Updates.pending(store), "Återställ läsaren innan du uppdaterar.", code: "RECOVERY")
+    busy = true
+    let operation = UUID()
+    updateOperation = operation
+    clearResults()
+    notice = ""
+    showUpdateProgress(.downloading(received: 0, total: asset.Size), operation: operation)
+    return true
+  }
+  func showUpdateProgress(_ progress: UpdateProgress, operation: UUID) {
+    dispatchPrecondition(condition: .onQueue(.main))
+    guard busy, updateOperation == operation else { return }
+    updateProgress = progress
+    readyMessage()
+    rebuild()
+  }
+  @discardableResult func finishUpdateOperation(_ operation: UUID) -> Bool {
+    dispatchPrecondition(condition: .onQueue(.main))
+    guard updateOperation == operation else { return false }
+    updateOperation = nil
+    updateProgress = nil
+    busy = false
+    return true
   }
 }

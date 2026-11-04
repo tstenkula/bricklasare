@@ -426,6 +426,20 @@ struct SelfTests {
     c.readyMessage()
     c.rebuild()
     try snapshot(c.window, to: folder.appendingPathComponent("ingen-lasare.png"))
+    let updateOperation = UUID()
+    c.busy = true
+    c.updateOperation = updateOperation
+    c.notice = ""
+    let updateStates: [(UpdateProgress, String)] = [
+      (.downloading(received: 740000, total: 2000000), "uppdatering-hamtar-37.png"),
+      (.verifying, "uppdatering-kontrollerar.png"),
+      (.installing, "uppdatering-installerar.png"),
+    ]
+    for (progress, filename) in updateStates {
+      c.showUpdateProgress(progress, operation: updateOperation)
+      try snapshot(c.window, to: folder.appendingPathComponent(filename))
+    }
+    c.finishUpdateOperation(updateOperation)
     for mode in [AccessMode.rco, .axema, .bewator] {
       c.preference = FormatPreference(Mode: mode, RcoChip: "M")
       c.info = ReaderInfo(board: "Simulated", id: "", firmware: "", profile: "Standardformat", pending: false, ready: true)
@@ -458,6 +472,6 @@ struct SelfTests {
     try snapshot(workflow, to: folder.appendingPathComponent("arbetsflode.png"))
     workflow.close()
     c.window.close()
-    print("Rendered 14 interface images with synthetic data; no hardware accessed.")
+    print("Rendered 17 interface images with synthetic data; no hardware accessed.")
   }
 }

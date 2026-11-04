@@ -1,4 +1,4 @@
-BRICKLÄSAREN – 3.6.0 / IT
+BRICKLÄSAREN – 3.6.1 / IT
 2026-11-03
 
 LEVERANS
@@ -106,7 +106,7 @@ Samma sökväg behålls för kompatibilitet med fungerande läsarprofil.
 - usb-mode-<ID>.lock: låsfil; ett kvarvarande tomt filnamn är normalt.
 - sjalvtest-reception.txt och felrapporter: teknisk status utan skannade ID.
 
-Packa upp 3.6.0 i en egen mapp och starta dess CMD-fil. Byt en eventuell
+Packa upp 3.6.1 i en egen mapp och starta dess CMD-fil. Byt en eventuell
 genväg först när den ska peka på 3.3. Kör bara en version mot läsaren åt
 gången. v3.1 ändras inte, men läsarens Custom Report-läge är beständigt.
 Skapa receptionspaket under Hjälp exporterar programmet
@@ -141,6 +141,6 @@ ARBETSFLODE OCH UPPDATERINGAR
 Under Hjälp > IT-inställningar kan automatisk kopiering, ljudsignaler,
 uppdateringskanal och automatisk versionskontroll väljas. Uppdateringen
 kräver uttryckligt installationsval och bevarar lokala inställningar.
-Se Updates/README.md i källkoden. Repot är fortfarande privat.
+Se Updates/README.md i källkoden. Repot och uppdateringskällan är publika.
 Gratis privat bruk; kommersiellt och organisatoriskt bruk kräver separat
 betald Tobtech-licens. Se LICENSE.txt.

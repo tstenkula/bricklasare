@@ -1,4 +1,4 @@
-BRICKLÄSAREN 3.6.0 – VERIFIERING
+BRICKLÄSAREN 3.6.1 – VERIFIERING
 
 Tobtech-projekt med neutral standardprofil. Aktuell teststatus redovisas
 av GitHub Actions för Windows och macOS. Äldre leveransloggar och byggen
@@ -19,5 +19,31 @@ drivrutin/tillbehörsgodkännande, läsning med verkliga taggar, urkoppling
 under läsning, vila/återanslutning och längre drift. Att resurstesterna
 passerar är inte ett bevis på att alla tänkbara minnesläckor är uteslutna.
 
-Uppdateringskällan blir tillgänglig för vanliga användare först när repot
-senare görs publikt. Ingen OS-kodsignering eller notariering har införts.
+Uppdateringskällan är publik och kan hämtas utan inloggning. Den stabila
+kanalen används för stabila utgåvor. 3.6.1 är stabil; hårdvaruprovet
+återstår. Ingen OS-kodsignering eller notariering har införts.
+
+CHECKLISTA FÖR GODKÄND HÅRDVARUKÖRNING
+
+Utför på Windows och Mac med Apple Silicon. Anteckna OS-version,
+läsarmodell/firmware och godkänt/underkänt utan att spara kortnummer.
+
+[ ] Första start på en ny dator med fabriksny läsare: anslutningsguiden
+    fungerar och rätt passersystem sparas även efter omstart.
+[ ] Prova varje passersystem/bricktyp som ska anges som verifierat stöd.
+    Jämför visade nummer med det befintliga passersystemet. Kontrollera
+    båda stegen i MIFARE + EM samt kopiera och Rensa.
+[ ] Avbryt läsningen och koppla ur läsaren under båda lässtegen. Inga
+    gamla eller ofullständiga nummer får visas eller kopieras som klara.
+[ ] Återanslut samma läsare, prova vila/väckning och starta om programmet.
+    Återställningen ska bli klar och nästa läsning ge rätt resultat.
+[ ] Kör återkommande läsningar under en arbetsdag. Notera frysningar,
+    fel och om minnesanvändningen fortsätter växa utan att plana ut.
+[ ] Prova uppdatering från dialogen: hämta, godkänn, avsluta, installera
+    och starta om. Kontrollera inställningar och att föregående version
+    finns kvar. Windows utgivarvarning och Mac-skydd ska också provas.
+
+3.6.1 är stabil; ovanstående hårdvaruprov återstår.
+Ett misslyckat prov dokumenteras och rättas; ett ej utfört prov räknas
+inte som godkänt. Anteckna testresultaten innan stödet beskrivs som
+verifierat med verklig hårdvara.
