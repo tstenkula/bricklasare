@@ -18,3 +18,5 @@ Skicka rapportens innehåll till den som felsöker. Bricknummer, läsar-ID, IP-a
 Metodnamnen i rapporten kommer från programmets källkod. De innehåller inga argument, fullständiga anropsstackar eller källfilssökvägar. Okända undantagsmeddelanden kopieras aldrig till rapporten.
 
 Att version 3.1 fungerade bekräftar inte att senare USB-förberedelse har lyckats. Radera inte original- eller återställningsfiler och återställ inte läsaren till fabriksinställningar som första felsökningssteg. Rapporten hjälper oss att skilja en läsarkompatibilitet från ett lokalt filproblem.
+
+Från 3.6.3 godkänner Windows både `00`/`FF` och heltalsrepresentationerna `0000`/`00FF` för USB-läget (av/på). Andra värden och fel datatyper stoppas fortfarande. En verklig läsare har rapporterat INTEGER med två byte; anslutning och skanning med rättningen behöver också provas på den.

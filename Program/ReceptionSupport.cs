@@ -1,4 +1,4 @@
-﻿// Reception v3.6.2 (PowerShell). Reader protocol remains in OmnikeyCore.cs.
+﻿// Reception v3.6.3 (PowerShell). Reader protocol remains in OmnikeyCore.cs.
 namespace Tobtech.OmnikeyRco
 {
     using System;
@@ -25,8 +25,8 @@ namespace Tobtech.OmnikeyRco
             Length = mode == null || mode.Value == null ? -1 : mode.Value.Length;
             // Only three fixed, non-identifying mode values are described. Other
             // payloads stay private, even if a faulty device returns unrelated data.
-            Value = Length == 1 && mode.Value[0] == 0 ? "00" : Length == 1 && mode.Value[0] == 1 ? "01" :
-                Length == 1 && mode.Value[0] == 255 ? "FF" : "Other";
+            int value = Length == 1 ? mode.Value[0] : Length == 2 && mode.Value[0] == 0 ? mode.Value[1] : -1;
+            Value = value == 0 ? "00" : value == 1 ? "01" : value == 255 ? "FF" : "Other";
         }
     }
 
@@ -342,8 +342,8 @@ namespace Tobtech.OmnikeyRco
         {
             lock (errorGate)
             {
-                return "BRICKLÄSAREN RECEPTION 3.6.2 – POWERSHELL\r\n" +
-                    "Läsarmotor: v3.6.2, standardformat med frivillig lokal IT-kalibrering.\r\n" +
+                return "BRICKLÄSAREN RECEPTION 3.6.3 – POWERSHELL\r\n" +
+                    "Läsarmotor: v3.6.3, standardformat med frivillig lokal IT-kalibrering.\r\n" +
                     "Rapport skapad: " + DateTime.Now.ToString("s") + "\r\n" +
                     "Diagnostik: anslutning 1.\r\n" +
                     "Inga skannade nummer, råsvar, sökvägar eller undantagsmeddelanden ingår.\r\n\r\n" +
@@ -452,7 +452,7 @@ namespace Tobtech.OmnikeyRco
         {
             get
             {
-                return "BRICKLÄSAREN 3.6.2\r\n\r\n" +
+                return "BRICKLÄSAREN 3.6.3\r\n\r\n" +
                     "Starta med " + ReceptionFiles.LauncherName + ".\r\n" +
                     "Första gången väljer du vilket passersystem du ska läsa för.\r\n" +
                     "Valet sparas direkt och används automatiskt vid nästa start.\r\n" +

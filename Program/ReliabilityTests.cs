@@ -601,6 +601,16 @@
         }
         private static void ExerciseConnectionDiagnostics(string directory)
         {
+            foreach (string encoded in new[] { "00", "0000" })
+                Check(!ReaderSafety.DecodeMode(new Tlv { Tag = 2, Value = Codec.Hex(encoded) }), "Disabled USB mode accepts documented value in one or two octets");
+            foreach (string encoded in new[] { "FF", "00FF" })
+                Check(ReaderSafety.DecodeMode(new Tlv { Tag = 2, Value = Codec.Hex(encoded) }), "Protected USB mode accepts documented value in one or two octets");
+            foreach (string encoded in new[] { "", "01", "0001", "0100", "FF00", "FFFF", "000000", "0000FF", "000000FF" })
+                Reject(delegate { ReaderSafety.DecodeMode(new Tlv { Tag = 2, Value = Codec.Hex(encoded) }); }, "Unknown, reversed or oversized USB integer remains rejected");
+            foreach (byte tag in new byte[] { 0, 1, 4, 5 })
+                Reject(delegate { ReaderSafety.DecodeMode(new Tlv { Tag = tag, Value = new byte[] { 0, 255 } }); }, "Wrong USB mode type remains rejected");
+            Reject(delegate { ReaderSafety.DecodeMode(null); }, "Missing USB mode remains rejected");
+            Reject(delegate { ReaderSafety.DecodeMode(new Tlv { Tag = 2, Value = null }); }, "Missing USB mode value remains rejected");
             FakeReader fake = new FakeReader();
             ReaderClient reader = new ReaderClient("192.168.63.99", directory, new LocalLog());
             int commands = 0;
@@ -612,6 +622,7 @@
                     "Connection diagnostic sends GET MIB only");
                 commands++; return fake.Send(command);
             };
+            fake.WideUsbMode = true;
             string report = ReaderDiagnostics.Inspect(reader);
             Check(report.Contains("IdentifyReader: OK") && report.Contains("UsbOutputMode: Custom Report"), "Read-only diagnostic identifies reader and USB mode");
             Check(commands > 10 && fake.Writes == 0 && Directory.GetFiles(directory).Length == 0, "Diagnostic creates no reader state and performs no writes");
@@ -642,7 +653,7 @@
         }
         private sealed class FakeReader
         {
-            internal byte Board = 6; internal int Writes; internal bool BadSettings; internal bool BadUsbMode;
+            internal byte Board = 6; internal int Writes; internal bool BadSettings; internal bool BadUsbMode; internal bool WideUsbMode;
             internal int SoundFailure = -1;
             internal byte[] SoundTable = Enumerable.Range(0, 130).Select(i => (byte)(i < 39 ? 0 : 165)).ToArray();
             private bool present;
@@ -678,7 +689,7 @@
                 else if (key == "010200") value = new Tlv { Tag = 2, Value = new byte[] { Board } };
                 else if (key == "010100") value = new Tlv { Tag = 2, Value = Codec.Hex("01050176") };
                 else if (key == "010A00") value = new Tlv { Tag = 4, Value = Enumerable.Repeat((byte)0xAA, 16).ToArray() };
-                else if (key == "04010500") value = new Tlv { Tag = 2, Value = new byte[] { BadUsbMode ? (byte)1 : (byte)255 } };
+                else if (key == "04010500") value = new Tlv { Tag = 2, Value = BadUsbMode ? new byte[] { 1 } : WideUsbMode ? new byte[] { 0, 255 } : new byte[] { 255 } };
                 else if (key == ReaderClient.SoundOid) value = new Tlv { Tag = 4, Value = SoundTable };
                 else if (key == "0302010300") value = new Tlv { Tag = 4, Value = present ? Codec.Hex("3B00") : new byte[0] };
                 else value = BadSettings ? new Tlv { Tag = 4, Value = new byte[0] } : settings[key];

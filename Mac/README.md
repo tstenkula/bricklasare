@@ -1,10 +1,10 @@
 # Brickläsaren för macOS
 
-Native Swift/AppKit version of Brickläsaren 3.6.2, for **Apple Silicon (arm64), macOS 13 or later**. It implements the Windows operator workflow and number formats with a native USB/PC/SC transport. There is no PowerShell, .NET, browser, background service, Python installation, Intel binary or Windows EEM driver at runtime.
+Native Swift/AppKit version of Brickläsaren 3.6.3, for **Apple Silicon (arm64), macOS 13 or later**. It implements the Windows operator workflow and number formats with a native USB/PC/SC transport. There is no PowerShell, .NET, browser, background service, Python installation, Intel binary or Windows EEM driver at runtime.
 
 ## Install and run
 
-Open `Bricklasaren-3.6.2-macOS-AppleSilicon.dmg`, drag `Bricklasaren.app` to **Program / Applications**, and open it. Connect one OMNIKEY 5427 CK or Gen2 without a tag on it. Approve the USB accessory if macOS requests it. Select the access system on first launch; no system is preselected. The choice and RCO chip selection persist per user.
+Open `Bricklasaren-3.6.3-macOS-AppleSilicon.dmg`, drag `Bricklasaren.app` to **Program / Applications**, and open it. Connect one OMNIKEY 5427 CK or Gen2 without a tag on it. Approve the USB accessory if macOS requests it. Select the access system on first launch; no system is preselected. The choice and RCO chip selection persist per user.
 
 The app uses an ad-hoc signature for execution on Apple Silicon. It is not Developer ID signed or notarized. A downloaded copy may require **System Settings → Privacy & Security → Open Anyway** after the first opening attempt. Do not disable Gatekeeper globally. See [Apple's instructions](https://support.apple.com/en-us/102445).
 
