@@ -15,7 +15,7 @@ namespace Tobtech.OmnikeyRco
         private static void Check(bool ok, string reason) { count++; if (!ok) throw new InvalidOperationException("Inspection test: " + reason); }
         private static void Reject(Action action, string reason)
         {
-            bool rejected = false; try { action(); } catch (IOException) { rejected = true; }
+            bool rejected = false; try { action(); } catch (InvalidDataException) { rejected = true; } catch (IOException) { rejected = true; }
             Check(rejected, reason);
         }
         private static byte[] Bytes(string s) { return Encoding.ASCII.GetBytes(s); }
