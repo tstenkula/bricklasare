@@ -3,7 +3,7 @@
 param(
     [switch]$InstallOnDisposableRunner,
     [string]$OutputDirectory,
-    [ValidateSet('historical', 'stable-3.6.1', 'stable-3.6.2')][string]$Case = 'historical'
+    [ValidateSet('historical', 'stable-3.6.1', 'stable-3.6.2', 'stable-3.6.4', 'preview-3.6.4')][string]$Case = 'historical'
 )
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
@@ -47,6 +47,20 @@ if ($Case -ceq 'stable-3.6.2') {
     if (-not (Test-Path -LiteralPath $fixture -PathType Leaf)) { throw 'The reviewed signed 3.6.2 stable fixture is required.' }
     $fixtureFile = Get-Item -LiteralPath $fixture -Force
     if ($fixtureFile.Length -lt 1 -or $fixtureFile.Length -gt 65536 -or ($fixtureFile.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) { throw 'Invalid stable fixture file.' }
+}
+if ($Case -ceq 'stable-3.6.4' -or $Case -ceq 'preview-3.6.4') {
+    $sourceVersion = '3.6.2'; $targetVersion = '3.6.4'
+    $channel = if ($Case -ceq 'preview-3.6.4') { 'preview' } else { 'stable' }
+    $sourceTag = 'v3.6.2'
+    $targetTag = if ($channel -ceq 'preview') { 'v3.6.4-preview.1' } else { 'v3.6.4' }
+    $oldSize = 233016; $newSize = $null
+    $oldHash = 'ba51f798b6abd865c74804b4e7a2af490f09149d9b5bbf9f6b3f53290c274753'
+    $helperHash = 'e276d096182fa63fd4f818c45e46bdede099e14a7befffb667647e046078e9db'
+    $newHash = $null; $feedHash = $null
+    $fixture = Join-Path $PSScriptRoot ('fixtures\published-' + $Case + '.feed')
+    if (-not (Test-Path -LiteralPath $fixture -PathType Leaf)) { throw 'The reviewed signed fixture is required.' }
+    $fixtureFile = Get-Item -LiteralPath $fixture -Force
+    if ($fixtureFile.Length -lt 1 -or $fixtureFile.Length -gt 65536 -or ($fixtureFile.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) { throw 'Invalid signed fixture file.' }
 }
 $oldUrl = $releaseBase + $sourceTag + '/Bricklasaren-' + $sourceVersion + '-Windows.zip'
 $newUrl = $releaseBase + $targetTag + '/Bricklasaren-' + $targetVersion + '-Windows.zip'
@@ -211,6 +225,11 @@ try {
         foreach ($name in $sentinels.Keys) { [IO.File]::WriteAllText((Join-Path $data $name), $sentinels[$name], $utf8) }
         $settingsBefore = File-Manifest $data
         [IO.File]::WriteAllText((Join-Path $target 'old-install-sentinel.txt'), 'Retain the complete old installation.', $utf8)
+        if ($targetVersion -ceq '3.6.4') {
+            $oldLauncher = Join-Path $target 'Starta-Bricklasaren.cmd'
+            Set-Content -LiteralPath $oldLauncher -Stream Zone.Identifier -Value @('[ZoneTransfer]', 'ZoneId=3') -Encoding ASCII
+            Confirm ((Get-Content -LiteralPath $oldLauncher -Stream Zone.Identifier) -contains 'ZoneId=3') 'Old launcher has a synthetic browser download marker'
+        }
         $oldFiles = File-Manifest $target; $newFiles = File-Manifest $expected
         $stage = Join-Path (Join-Path $data 'updates') ([Guid]::NewGuid().ToString('N')); [void][IO.Directory]::CreateDirectory($stage)
         Copy-Item -LiteralPath $newArchive -Destination (Join-Path $stage 'package.zip')
@@ -271,6 +290,12 @@ namespace Tobtech.Acceptance {
         Confirm (Same-Manifest $newFiles (File-Manifest $target)) ('Installed files exactly match the published ' + $targetVersion + ' ZIP')
         $backups = @(Get-ChildItem -LiteralPath $work -Directory | Where-Object { $_.Name -like 'installed app.previous-*' })
         Confirm ($backups.Count -eq 1 -and (Same-Manifest $oldFiles (File-Manifest $backups[0].FullName))) 'Previous installation is preserved byte for byte as a backup'
+        if ($targetVersion -ceq '3.6.4') {
+            $newLauncher = Join-Path $target 'Starta-Bricklasaren.cmd'
+            Confirm (@(Get-Item -LiteralPath $newLauncher -Stream Zone.Identifier -ErrorAction SilentlyContinue).Count -eq 0) 'Verified replacement creates a fresh launcher without inheriting the old download marker'
+            $previousLauncher = Join-Path $backups[0].FullName 'Starta-Bricklasaren.cmd'
+            Confirm ((Get-Content -LiteralPath $previousLauncher -Stream Zone.Identifier) -contains 'ZoneId=3') 'Previous launcher retains its original download marker in the backup'
+        }
         foreach ($name in $settingsBefore.Keys) { Confirm ((Get-FileHash -LiteralPath (Join-Path $data $name)).Hash -ceq $settingsBefore[$name]) ('Personal setting preserved: ' + $name) }
         Confirm (-not (Test-Path -LiteralPath (Join-Path $stage 'package.zip'))) 'Verified staging archive is removed after successful installation'
     } else { $result.Limitations += 'Full installation, settings preservation, and backup were not tested; -InstallOnDisposableRunner was omitted.' }
