@@ -30,12 +30,15 @@ REPO = 'tstenkula/bricklasare'
 FEED_COMMIT = '136898a6df968a3e0a99b6333dbe8983e4d464c3'
 FEED_SHA256 = 'cc104420dc4e9ffdbd2ca2a7d9f5563beb4efda4616c9c2fab899e355b4313d3'
 RELEASE_PINS = {
+    '3.6.1': (2_237_291, 'f1831ad006487c5af3026bd96c6052ce6933cd8ca48f84c3d112b5afb4746278'),
     '3.5.2': (2_186_584, '7714bbc5bc869a2835aa3ee6ce719077da6b3fbcdf0e7fc15be7b7611bfd3e6f'),
     '3.6.0': (2_219_538, '328580e26dde16e2085c1f2a42bdc4388167f409754845e914935ba40472afd2'),
 }
 # Fixed cases only: the stable target takes its size/hash from the real signed
 # fixture. It cannot run until that fixture has been published and reviewed.
 CASES = {
+    'stable-3.6.2': dict(source='3.6.1', target='3.6.2', channel='stable',
+                       source_tag='v3.6.1', target_tag='v3.6.2'),
     'historical': dict(source='3.5.2', target='3.6.0', channel='preview',
                        source_tag='v3.5.2-preview.1', target_tag='v3.6.0-preview.1'),
     'stable-3.6.1': dict(source='3.6.0', target='3.6.1', channel='stable',
@@ -129,9 +132,9 @@ def feed_for_case(name):
         envelope = download(f'https://raw.githubusercontent.com/{REPO}/{FEED_COMMIT}/Updates/preview.feed', 65_536)
         require(hashlib.sha256(envelope).hexdigest() == FEED_SHA256, 'Original signed 3.6.0 feed changed.')
         return envelope
-    require(name == 'stable-3.6.1', 'Unknown acceptance case.')
-    fixture = pathlib.Path(__file__).resolve().parent / 'fixtures/published-stable-3.6.1.feed'
-    require(fixture.is_file() and not fixture.is_symlink(), 'The reviewed signed 3.6.1 stable fixture is required.')
+    require(name in ('stable-3.6.1', 'stable-3.6.2'), 'Unknown acceptance case.')
+    fixture = pathlib.Path(__file__).resolve().parent / ('fixtures/published-' + name + '.feed')
+    require(fixture.is_file() and not fixture.is_symlink(), 'The reviewed signed stable fixture is required.')
     with fixture.open('rb') as stream:
         envelope = stream.read(65_537)
     require(0 < len(envelope) <= 65_536, 'Invalid stable fixture size.')
@@ -244,6 +247,7 @@ def main():
         original_tree = tree(target)
         expected_tree = tree(work / 'expected/Bricklasaren.app')
         settings = {
+            'lasarljud-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA.json': b'{"Schema":1,"ReaderId":"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA","Firmware":"00000000","Original":"000000000000000000000000000000000000000000000000000000000000000000000000000000"}',
             'formatval.json': b'{"Mode":"RCO","RcoChip":"E"}',
             'arbetsflode.json': ('{"copy":0,"sounds":false,"channel":"' + case['channel'] + '","autoCheck":false}').encode(),
             'utseende.json': b'{"Schema":1,"AccentHex":"#003B55","Organization":"","Subtitle":"","LogoFile":""}',
