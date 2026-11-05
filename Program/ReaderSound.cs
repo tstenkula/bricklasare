@@ -168,7 +168,7 @@
             e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
             e.Graphics.Clear(Focused || ClientRectangle.Contains(PointToClient(Control.MousePosition)) ? Ui.AccentLight : Color.White);
             float scale = e.Graphics.DpiX / 96F;
-            int size = (int)Math.Round(24 * scale), top = (int)Math.Round(4 * scale);
+            int size = (int)Math.Round(22 * scale), top = (int)Math.Round(5 * scale);
             Rectangle iconArea = new Rectangle((Width - size) / 2, top, size, size);
             Color ink = Enabled ? Ui.Accent : Ui.Muted;
             Image icon = Muted ? offIcon : onIcon;
@@ -181,7 +181,7 @@
                 e.Graphics.InterpolationMode = InterpolationMode.HighQualityBicubic;
                 e.Graphics.DrawImage(icon, iconArea, 0, 0, icon.Width, icon.Height, GraphicsUnit.Pixel, tint);
             }
-            Rectangle labelArea = new Rectangle(0, Height - (int)Math.Round(16 * scale), Width, (int)Math.Round(14 * scale));
+            Rectangle labelArea = new Rectangle(0, Height - (int)Math.Round(16 * scale), Width, (int)Math.Round(12 * scale));
             TextRenderer.DrawText(e.Graphics, ReaderIcon ? "Läsare" : "App", Ui.GetFont(8F), labelArea, ink, TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
             if (Focused) ControlPaint.DrawFocusRectangle(e.Graphics, Rectangle.Inflate(ClientRectangle, -3, -3));
         }

@@ -136,7 +136,24 @@ final class SoundButton: NSButton {
   var actionBlock: (() -> Void)?
   let readerIcon: Bool
   var muted = false { didSet { image = muted ? Self.offIcon : Self.onIcon } }
-  var color = Theme.ink { didSet { contentTintColor = color; needsDisplay = true } }
+  var color = Theme.ink { didSet {
+    contentTintColor = color
+    if color != oldValue { tintIcons() }
+    needsDisplay = true
+  } }
+  private var tintedOn: NSImage?, tintedOff: NSImage?
+  private func tintIcons() {
+    func tint(_ source: NSImage) -> NSImage {
+      let result = NSImage(size: source.size)
+      result.lockFocus()
+      source.draw(in: NSRect(origin: .zero, size: source.size))
+      color.setFill()
+      NSRect(origin: .zero, size: source.size).fill(using: .sourceAtop)
+      result.unlockFocus()
+      return result
+    }
+    tintedOn = tint(Self.onIcon); tintedOff = tint(Self.offIcon)
+  }
   private static func icon(_ name: String) -> NSImage {
     guard let url = Bundle.main.resourceURL?.appendingPathComponent("Lucide/" + name + ".png"),
           let image = NSImage(contentsOf: url) else { return NSImage(size: NSSize(width: 24, height: 24)) }
@@ -156,6 +173,7 @@ final class SoundButton: NSButton {
     alignment = .center
     font = .systemFont(ofSize: 9)
     contentTintColor = color
+    tintIcons()
     target = self; self.action = #selector(clicked)
     setButtonType(.momentaryPushIn)
     isBordered = false
@@ -168,7 +186,28 @@ final class SoundButton: NSButton {
   override func draw(_ dirtyRect: NSRect) {
     (isHighlighted ? Theme.mix(.white, .black, 0.07) : .white).setFill()
     NSBezierPath(roundedRect: bounds, xRadius: 7, yRadius: 7).fill()
-    super.draw(dirtyRect)
+    // Fixed 48pt button: 5pt above a 22pt icon, 5pt before the 12pt text line.
+    // Draw the original stock image; changing state never changes its layout slot.
+    let icon = muted ? tintedOff : tintedOn
+    icon?.draw(in: NSRect(x: (bounds.width - 22) / 2, y: 5, width: 22, height: 22),
+               from: .zero, operation: .sourceOver, fraction: isEnabled ? 1 : 0.45,
+               respectFlipped: true, hints: nil)
+    let paragraph = NSMutableParagraphStyle(); paragraph.alignment = .center
+    title.draw(in: NSRect(x: 0, y: 32, width: bounds.width, height: 12),
+               withAttributes: [.font: font ?? NSFont.systemFont(ofSize: 9),
+                                .foregroundColor: isEnabled ? color : Theme.muted,
+                                .paragraphStyle: paragraph])
+    if window?.firstResponder === self {
+      NSColor.keyboardFocusIndicatorColor.setStroke()
+      let focus = NSBezierPath(roundedRect: bounds.insetBy(dx: 2, dy: 2), xRadius: 5, yRadius: 5)
+      focus.lineWidth = 2; focus.stroke()
+    }
+  }
+  override func becomeFirstResponder() -> Bool {
+    let result = super.becomeFirstResponder(); needsDisplay = true; return result
+  }
+  override func resignFirstResponder() -> Bool {
+    let result = super.resignFirstResponder(); needsDisplay = true; return result
   }
 }
 
