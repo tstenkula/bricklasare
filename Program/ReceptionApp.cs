@@ -216,7 +216,7 @@ namespace Tobtech.OmnikeyRco
 
             string iconPath = Path.Combine(ReceptionFiles.PackagePath, "Program", "Bricklasaren.ico");
             if (File.Exists(iconPath)) { try { using (Icon source = new Icon(iconPath)) appIcon = (Icon)source.Clone(); Icon = appIcon; } catch (ArgumentException) { } catch (IOException) { } catch (UnauthorizedAccessException) { } }
-            Text = "Brickläsaren · 3.6.1";
+            Text = "Brickläsaren · 3.6.2";
             Font = Ui.GetFont(10F); ForeColor = Ui.Ink; BackColor = Ui.Paper;
             AutoScaleMode = AutoScaleMode.Dpi; AutoScaleDimensions = new SizeF(96F, 96F);
             StartPosition = FormStartPosition.CenterScreen;
@@ -235,7 +235,7 @@ namespace Tobtech.OmnikeyRco
             connection.ForeColor = Ui.Muted; connection.MaximumSize = new Size(250, 0); connection.TextAlign = ContentAlignment.MiddleRight;
             connection.AccessibleRole = AccessibleRole.StaticText;
             help.Anchor = AnchorStyles.Top | AnchorStyles.Right; help.Margin = new Padding(0, 4, 0, 0); help.TabIndex = 0;
-            Ui.Add(tools, connection); Ui.Add(tools, help);
+            Ui.Add(tools, connection); InitializeSoundButtons(tools);
             header.Controls.Add(heading, 0, 0); header.Controls.Add(tools, 1, 0); Ui.Add(root, header);
             statusPanel.SurfaceColor = Ui.AccentLight; statusPanel.Padding = new Padding(18, 12, 18, 12);
             statusPanel.Margin = new Padding(0, 0, 0, 14); statusPanel.TabIndex = 0; statusPanel.MinimumSize = new Size(0, 132);
@@ -315,7 +315,7 @@ namespace Tobtech.OmnikeyRco
                 e.Cancel = true; RequestCancel();
                 notice.Text = "Låt programmet arbeta klart. Stäng sedan fönstret igen.";
             };
-            log.Add("Receptionsgränssnitt 3.6.1 (PowerShell). Lokal diagnostik utan råa kortdata.");
+            log.Add("Receptionsgränssnitt 3.6.2 (PowerShell). Lokal diagnostik utan råa kortdata.");
             ApplyAppearance(); ApplyModeUi(); UpdateButtons(); ResumeLayout(true);
             if (previewOnly) connection.Text = "Förhandsvisning · ingen läsarkontakt";
         }
@@ -459,7 +459,7 @@ namespace Tobtech.OmnikeyRco
             clear.Enabled = !busy && HasResults;
             leftState.Text = HasResults ? "Ctrl+1 för att kopiera" : "Väntar på läsning";
             rightState.Text = HasResults ? "Ctrl+2 för att kopiera" : "Väntar på läsning";
-            help.Enabled = !busy;
+            help.Enabled = !busy; UpdateSoundButtons();
         }
         private void SetBusy(bool value)
         {
@@ -579,7 +579,7 @@ namespace Tobtech.OmnikeyRco
         {
             if (busy) return;
             reconnectPending = false; reconnectTimer.Stop();
-            ClearResults(); reader = null; outputProtected = false; SetBusy(true); connection.Text = "Ansluter läsaren …";
+            ClearResults(); reader = null; readerSound = null; outputProtected = false; SetBusy(true); connection.Text = "Ansluter läsaren …";
             SetInstruction("ANSLUTER", "Kontrollerar läsaren", "Låt USB-kabeln sitta i. Du behöver inte lägga på någon bricka ännu.", false);
             ReaderClient candidate = null;
             try
@@ -607,6 +607,7 @@ namespace Tobtech.OmnikeyRco
                         notice.Text = "Läsarprofilen kunde inte användas. Be IT kontrollera den via Hjälp.";
                     }
                 }
+                if (outputProtected && !reader.HasPendingRecovery) { try { readerSound = await Task.Run(delegate { return candidate.ReadReaderSound(); }); } catch { readerSound = null; } }
                 ReceptionFiles.SaveAddress(address); ReadyMessage();
             }
             catch (Exception ex)
@@ -1017,7 +1018,7 @@ namespace Tobtech.OmnikeyRco
             Button test = ActionButton("Kontrollera referensbricka", "Reference"); test.Enabled = protectedOutput && connected && !pending;
             Button restore = ActionButton("Återställ läsaren", "Recover"); restore.Enabled = pending;
             service.Controls.Add(test); service.Controls.Add(restore); Ui.Add(advanced, service);
-            Ui.Add(advanced, Ui.Label("Version 3.6.1 · PowerShell · Programmet läser bricknummer.\r\nTobtech", 9F, false));
+            Ui.Add(advanced, Ui.Label("Version 3.6.2 · PowerShell · Programmet läser bricknummer.\r\nTobtech", 9F, false));
             more.Click += delegate
             {
                 advanced.Visible = !advanced.Visible;

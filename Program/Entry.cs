@@ -3,8 +3,8 @@
 [assembly: System.Reflection.AssemblyDescription("Läser RCO, Axema VAKA och Bewator med OMNIKEY 5427 CK")]
 [assembly: System.Reflection.AssemblyCompany("Tobtech")]
 [assembly: System.Reflection.AssemblyProduct("Brickläsaren")]
-[assembly: System.Reflection.AssemblyVersion("3.6.1.0")]
-[assembly: System.Reflection.AssemblyFileVersion("3.6.1.0")]
+[assembly: System.Reflection.AssemblyVersion("3.6.2.0")]
+[assembly: System.Reflection.AssemblyFileVersion("3.6.2.0")]
 namespace Tobtech.OmnikeyRco
 {
     using System;
@@ -32,7 +32,7 @@ namespace Tobtech.OmnikeyRco
                     int core = SelfTests.Run();
                     int ui = ReceptionTests.Run();
                     int reliability = ReliabilityTests.Run();
-                    string report = "BRICKLÄSAREN RECEPTION 3.6.1 – POWERSHELL\r\n" +
+                    string report = "BRICKLÄSAREN RECEPTION 3.6.2 – POWERSHELL\r\n" +
                         core + " tester av läsarmotorn godkända.\r\n" +
                         ui + " tester av receptionslogiken godkända.\r\n" +
                         reliability + " tester av inställningar och resurshantering godkända.\r\n" +

@@ -43,7 +43,7 @@ jobs:
       - name: Compile and run offline self-tests
         shell: powershell
         env:
-          BRICKLASARE_TEST_ARCHIVE: ${{ github.workspace }}\dist\Bricklasaren-3.6.1-Windows.zip
+          BRICKLASARE_TEST_ARCHIVE: ${{ github.workspace }}\dist\Bricklasaren-3.6.2-Windows.zip
           BRICKLASARE_TEST_IMAGES: ${{ runner.temp }}\bricklasare-ui
         run: |
           & .\Program\Starta-Bricklasaren.ps1 -SelfTestOnly
@@ -73,6 +73,6 @@ jobs:
           name: windows-interface
           path: |
             ${{ runner.temp }}\bricklasare-ui
-            dist/Bricklasaren-3.6.1-Windows.zip
+            dist/Bricklasaren-3.6.2-Windows.zip
           if-no-files-found: ignore
           retention-days: 3

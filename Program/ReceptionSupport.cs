@@ -1,4 +1,4 @@
-﻿// Reception v3.6.1 (PowerShell). Reader protocol remains in OmnikeyCore.cs.
+﻿// Reception v3.6.2 (PowerShell). Reader protocol remains in OmnikeyCore.cs.
 namespace Tobtech.OmnikeyRco
 {
     using System;
@@ -35,14 +35,17 @@ namespace Tobtech.OmnikeyRco
                 return new string[] {
                     LauncherName,
                     "Program/Starta-Bricklasaren.ps1", "Program/Bricklasaren.ico",
-                    "Program/Entry.cs", "Program/OmnikeyCore.cs", "Program/ReaderNetwork.cs", "Program/ReaderNetworkTests.cs",
+                    "Program/Entry.cs", "Program/OmnikeyCore.cs", "Program/ReaderSound.cs", "Program/ReaderNetwork.cs", "Program/ReaderNetworkTests.cs",
                     "Program/FirstStart.cs", "Program/Appearance.cs", "Program/SettingsDialogs.cs", "Program/ReliabilityTests.cs",
                     "Program/ReceptionSupport.cs", "Program/ReaderSafety.cs", "Program/ReceptionApp.cs",
                     "START-HAR.txt", "Snabbstart.txt",
-                    "IT/LAS-MIG.txt", "IT/Starta-med-felsokning.cmd",
+                    "IT/LAS-MIG.txt", "IT/Ljud.md", "IT/Starta-med-felsokning.cmd",
                     "IT/Forsta-start.md", "IT/Utseende.md", "IT/Kor-sjalvtester.cmd", "IT/Verifiering.txt", "IT/Referensbricka.md",
                     "Drivrutiner/LAS-MIG.txt", "LICENSE.txt", "CONTRIBUTING.md",
-                    "Program/Workflow.cs", "Program/Updates.cs", "Program/Install-Update.ps1"
+                    "Program/Workflow.cs", "Program/Updates.cs", "Program/Install-Update.ps1",
+                    "Assets/Lucide/volume-2.png", "Assets/Lucide/volume-off.png",
+                    "Assets/Lucide/volume-2.svg", "Assets/Lucide/volume-off.svg",
+                    "Assets/Lucide/LICENSE.txt", "Assets/Lucide/SOURCE.txt"
                 };
             }
         }
@@ -208,8 +211,8 @@ namespace Tobtech.OmnikeyRco
         {
             lock (errorGate)
             {
-                return "BRICKLÄSAREN RECEPTION 3.6.1 – POWERSHELL\r\n" +
-                    "Läsarmotor: v3.6.1, standardformat med frivillig lokal IT-kalibrering.\r\n" +
+                return "BRICKLÄSAREN RECEPTION 3.6.2 – POWERSHELL\r\n" +
+                    "Läsarmotor: v3.6.2, standardformat med frivillig lokal IT-kalibrering.\r\n" +
                     "Rapport skapad: " + DateTime.Now.ToString("s") + "\r\n" +
                     "Inga skannade nummer, råsvar eller undantagsmeddelanden ingår.\r\n\r\n" +
                     (errorSummaries.Count == 0 ? "Inga fel registrerade under denna programkörning." : String.Join("\r\n", errorSummaries.ToArray()));
@@ -317,7 +320,7 @@ namespace Tobtech.OmnikeyRco
         {
             get
             {
-                return "BRICKLÄSAREN 3.6.1\r\n\r\n" +
+                return "BRICKLÄSAREN 3.6.2\r\n\r\n" +
                     "Starta med " + ReceptionFiles.LauncherName + ".\r\n" +
                     "Första gången väljer du vilket passersystem du ska läsa för.\r\n" +
                     "Valet sparas direkt och används automatiskt vid nästa start.\r\n" +
@@ -478,7 +481,9 @@ namespace Tobtech.OmnikeyRco
             check(packageFiles.All(delegate(string p) {
                 string ext = Path.GetExtension(p).ToLowerInvariant();
                 bool sourceOrDocument = ext == ".cmd" || ext == ".ps1" || ext == ".cs" || ext == ".txt" || ext == ".md";
-                return sourceOrDocument || p == "Program/Bricklasaren.ico";
+                return sourceOrDocument || p == "Program/Bricklasaren.ico" ||
+                    p == "Assets/Lucide/volume-2.png" || p == "Assets/Lucide/volume-off.png" ||
+                    p == "Assets/Lucide/volume-2.svg" || p == "Assets/Lucide/volume-off.svg";
             }));
             check(packageFiles.All(delegate(string p) { return !Path.IsPathRooted(p) && !p.Contains(".."); }));
             // A caller cannot change the allow-list used by the next export.

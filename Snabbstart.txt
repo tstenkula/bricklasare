@@ -1,4 +1,4 @@
-﻿BRICKLÄSAREN – 3.6.1
+﻿BRICKLÄSAREN – 3.6.2
 
 Starta med Starta-Bricklasaren.cmd.
 Första gången väljer du passersystem och klickar Spara och börja.
@@ -30,3 +30,5 @@ Vid frågor eller problem: kontakta IT via Hjälp.
 
 Färg, logotyp och organisationsnamn ändras under Hjälp > IT-inställningar > Utseende.
 Nya läsare använder standardformat utan referensbricka. Befintliga profiler återanvänds.
+
+Ljud: knapparna Läsare och App styr var sitt ljud. Överstruken symbol betyder av. Läsarens pip är oberoende av datorns volym.

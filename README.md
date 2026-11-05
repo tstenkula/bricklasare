@@ -10,7 +10,7 @@ The interface is Swedish. Supported output formats are **RCO – MIFARE + EM (mR
 
 ## Release status
 
-[Official downloads](https://github.com/tstenkula/bricklasare/releases) are public and require no GitHub account. **3.6.1 is the stable release.** Automated tests cover both platforms, and the published 3.5.2 → 3.6.0 installers have passed isolated installation tests. **Physical OMNIKEY acceptance testing is still pending**, including first-use setup, actual tag numbers and recovery. See [the hardware checklist](IT/Verifiering.txt).
+[Official downloads](https://github.com/tstenkula/bricklasare/releases) are public and require no GitHub account. **Stable releases are listed on the downloads page.** Automated tests cover both platforms, and the published 3.5.2 → 3.6.0 and 3.6.0 → 3.6.1 installers have passed isolated installation tests. **Physical OMNIKEY acceptance testing is still pending**, including first-use setup, actual tag numbers and recovery. See [the hardware checklist](IT/Verifiering.txt).
 
 ## Start
 
@@ -46,3 +46,5 @@ Version 3.6.0 refines the reader workspace and result states, restores predictab
 Version 3.6.1 adds actual download progress and rechecks operation ownership after modal confirmation dialogs, so a reconnect cannot be overwritten by another operation.
 
 `SHA256SUMS.txt` covers repository files. Update feeds cover release archives. The release signing private key is never stored in this repository or in an application.
+
+Version 3.6.2 adds compact **Läsare** and **App** sound buttons. Reader beeps and app cues are independent. Reader changes preserve LED colours and timings, keep a per-reader recovery record, and verify the device state before displaying success. Physical buzzer acceptance is pending.

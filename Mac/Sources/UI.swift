@@ -259,6 +259,7 @@ final class ReaderView {
   let footer = label("", size: 11, color: Theme.muted)
   let readButton: ActionButton, cancelButton: ActionButton, connectButton: ActionButton
   let helpButton: ActionButton, bothButton: ActionButton, clearButton: ActionButton
+  let readerSoundButton: SoundButton, appSoundButton: SoundButton
   let first: ResultView, second: ResultView
   let instructionPanel: NSView
   let updatePanel: NSView
@@ -284,6 +285,8 @@ final class ReaderView {
       controller?.rebuild()
     }
     connectButton = ActionButton("Anslut läsare") { [weak controller] in controller?.connect() }
+    readerSoundButton = SoundButton(reader: true) { [weak controller] in controller?.toggleReaderSound() }
+    appSoundButton = SoundButton(reader: false) { [weak controller] in controller?.toggleAppSound() }
     helpButton = ActionButton("Hjälp") { [weak controller] in controller?.help() }
     helpButton.widthAnchor.constraint(equalToConstant: 100).isActive = true
     bothButton = ActionButton("Kopiera båda numren", height: 34) { [weak controller] in
@@ -313,7 +316,8 @@ final class ReaderView {
     let titles = stack([label("Brickläsaren", size: 27, bold: true), mode, status], spacing: 4)
     for field in [mode, status] { field.widthAnchor.constraint(equalTo: titles.widthAnchor).isActive = true }
     titles.setContentHuggingPriority(.defaultLow, for: .horizontal)
-    let top = stack([titles, helpButton], horizontal: true, spacing: 20)
+    let soundControls = stack([readerSoundButton, appSoundButton], horizontal: true, spacing: 1)
+    let top = stack([titles, soundControls, helpButton], horizontal: true, spacing: 12)
     addFull(root, top)
 
     let messages = stack([stage, instruction, hint], spacing: 7)
@@ -413,6 +417,15 @@ final class ReaderView {
     connectButton.isHidden = c.info != nil || c.busy
     connectButton.isEnabled = c.usbMonitor?.timedOut != true
     helpButton.isEnabled = !c.busy
+    readerSoundButton.muted = c.readerSound == false
+    readerSoundButton.isEnabled = !c.busy && !c.reconnectPending && c.info?.ready == true && c.readerSound != nil && c.usbMonitor?.timedOut != true
+    appSoundButton.muted = !c.workflow.sounds
+    appSoundButton.isEnabled = !c.busy
+    readerSoundButton.color = theme.accent; appSoundButton.color = theme.accent
+    let readerSoundText = c.readerSound.map { "Läsarens pip: \($0 ? "på. Klicka för att stänga av." : "av. Klicka för att slå på.")" } ?? "Läsarens pip: läget är inte tillgängligt. Anslut läsaren igen."
+    let appSoundText = "Appens ljud: \(c.workflow.sounds ? "på. Klicka för att stänga av." : "av. Klicka för att slå på.")"
+    readerSoundButton.toolTip = readerSoundText; readerSoundButton.setAccessibilityLabel(readerSoundText)
+    appSoundButton.toolTip = appSoundText; appSoundButton.setAccessibilityLabel(appSoundText)
     let mode = c.preference?.Mode ?? .combo
     let canCopy = !c.busy && !c.reconnectPending && c.info?.ready == true && c.usbMonitor?.timedOut != true
     var title = "Eget passersystem", detail = "mR · MIFARE", copy = "Kopiera till eget system"
@@ -466,6 +479,7 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
   var startupUpdatePending = false
   var engine: ReaderEngine?
   var info: ReaderInfo?
+  var readerSound: Bool?
   var busy = false, token: CancelToken?, outputs: (String, String)?
   var stage = "ANSLUTER", instruction = "Kontrollerar läsaren",
     hint = "Låt USB-kabeln sitta i. Du behöver inte lägga på någon bricka ännu.", notice = "",
@@ -510,7 +524,7 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
       contentRect: NSRect(x: 0, y: 0, width: 900, height: 650),
       styleMask: [.titled, .closable, .miniaturizable, .resizable], backing: .buffered, defer: false
     )
-    window.title = "Brickläsaren · 3.6.1 · macOS"
+    window.title = "Brickläsaren · 3.6.2 · macOS"
     window.isReleasedWhenClosed = false
     window.minSize = NSSize(width: 800, height: 600)
     window.backgroundColor = Theme.paper
@@ -575,7 +589,7 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
   }
   @objc func aboutApp() {
     let a = NSAlert()
-    a.messageText = "Brickläsaren 3.6.1 för macOS"
+    a.messageText = "Brickläsaren 3.6.2 för macOS"
     a.informativeText =
       "Tobtech\n\nGratis för privat bruk. Kommersiellt bruk kräver en betald licens."
     a.addButton(withTitle: "Stäng")
@@ -679,6 +693,7 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
     usbMonitor?.invalidate()
     busy = true
     info = nil
+    readerSound = nil
     connection = "Ansluter läsaren …"
     notice = ""
     stage = "FÖRBEREDER"
@@ -699,11 +714,13 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
         }
         self.engine = reader
         let info = reader.info
-        DispatchQueue.main.async { self.completeConnection(info) }
+        let sound = try? ReaderSound.read(reader)
+        DispatchQueue.main.async { self.completeConnection(info, sound: sound) }
       } catch { self.finishError(error, info: nil) }
     }
   }
-  func completeConnection(_ info: ReaderInfo) {
+  func completeConnection(_ info: ReaderInfo, sound: Bool? = nil) {
+    readerSound = reconnectPending || usbMonitor?.timedOut == true ? nil : sound
     // A wake/disconnect/monitor deadline can supersede an otherwise successful reader job.
     self.info = reconnectPending || usbMonitor?.timedOut == true ? nil : info
     busy = false
@@ -717,7 +734,7 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
       (error as? ReaderError)?.message
       ?? "Inställningen kunde inte läsas eller sparas. Kontrollera filbehörigheterna."
     // Only bounded codes and app/platform versions are persisted, never exception payloads/APDUs/card IDs.
-    try? store.writeData("senaste-fel.txt", Data("Brickläsaren 3.6.1 macOS\nKod: \(code)\n".utf8))
+    try? store.writeData("senaste-fel.txt", Data("Brickläsaren 3.6.2 macOS\nKod: \(code)\n".utf8))
     DispatchQueue.main.async {
       self.info = self.reconnectPending ? nil : info
       self.latestErrorCode = code
