@@ -638,6 +638,9 @@
             {
                 SoundButton app = Field<SoundButton>(form, "appSoundButton"), hardware = Field<SoundButton>(form, "readerSoundButton");
                 form.Show(); Application.DoEvents(); Call(form, "UpdateButtons");
+                SetField(form, "readerSound", (bool?)null); Call(form, "UpdateButtons");
+                Check(!hardware.Enabled && !hardware.StateKnown && app.StateKnown, "Unknown reader sound never presents a confirmed on/off symbol");
+                SetField(form, "readerSound", (bool?)true); Call(form, "UpdateButtons");
                 Check(hardware.Enabled && !hardware.Muted && app.Muted, "Separate hardware-on and app-off icons");
                 Check(hardware.Size == app.Size && hardware.Top == app.Top, "Sound icon slots and baselines align");
                 app.PerformClick();
@@ -678,7 +681,7 @@
             fake.WideUsbMode = true;
             string report = ReaderDiagnostics.Inspect(reader);
             Check(report.Contains("IdentifyReader: OK") && report.Contains("UsbOutputMode: Custom Report"), "Read-only diagnostic identifies reader and USB mode");
-            Check(commands > 10 && fake.Writes == 0 && Directory.GetFiles(directory).Length == 0, "Diagnostic creates no reader state and performs no writes");
+            Check(report.Contains("ReaderSound: På") && commands > 10 && fake.Writes == 0 && Directory.GetFiles(directory).Length == 0, "Diagnostic creates no reader state and performs no writes");
             Check(!report.Contains(reader.ReaderId) && !report.Contains(reader.Firmware) && !report.Contains(directory) && !report.Contains("192.168.63.99"), "Diagnostic excludes device identity, address and paths");
             string backupPath = Path.Combine(directory, "usb-original-" + reader.ReaderId + ".json");
             byte[] damaged = System.Text.Encoding.UTF8.GetBytes("{}"); File.WriteAllBytes(backupPath, damaged);

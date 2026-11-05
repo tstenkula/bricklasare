@@ -289,7 +289,7 @@ final class ReaderView {
     appSoundButton = SoundButton(reader: false) { [weak controller] in controller?.toggleAppSound() }
     helpButton = ActionButton("Hjälp", height: 44) { [weak controller] in controller?.help() }
     helpButton.widthAnchor.constraint(equalToConstant: 100).isActive = true
-    helpButton.heightAnchor.constraint(equalTo: appSoundButton.heightAnchor).isActive = true
+    helpButton.heightAnchor.constraint(equalToConstant: 44).isActive = true
     bothButton = ActionButton("Kopiera båda numren", height: 34) { [weak controller] in
       guard let controller, let values = controller.outputs else { return }
       controller.copy("Eget passersystem (mR): \(values.0)\nHyresvärdens passersystem (eR): \(values.1)")
@@ -418,6 +418,7 @@ final class ReaderView {
     connectButton.isHidden = c.info != nil || c.busy
     connectButton.isEnabled = c.usbMonitor?.timedOut != true
     helpButton.isEnabled = !c.busy
+    readerSoundButton.stateKnown = c.readerSound != nil
     readerSoundButton.muted = c.readerSound == false
     readerSoundButton.isEnabled = !c.busy && !c.reconnectPending && c.info?.ready == true && c.readerSound != nil && c.usbMonitor?.timedOut != true
     appSoundButton.muted = !c.workflow.sounds
@@ -715,8 +716,14 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
         }
         self.engine = reader
         let info = reader.info
-        let sound = try? ReaderSound.read(reader)
-        DispatchQueue.main.async { self.completeConnection(info, sound: sound) }
+        let sound: Bool?
+        let soundProblem: Bool
+        do { sound = try ReaderSound.read(reader); soundProblem = false }
+        catch { sound = nil; soundProblem = true }
+        DispatchQueue.main.async {
+          if soundProblem { self.latestErrorCode = "SOUND_READ" }
+          self.completeConnection(info, sound: sound)
+        }
       } catch { self.finishError(error, info: nil) }
     }
   }

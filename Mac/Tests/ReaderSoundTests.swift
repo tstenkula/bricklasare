@@ -72,6 +72,7 @@ extension SelfTests {
     try check(!view.readerSoundButton.isEnabled && !view.appSoundButton.isEnabled && controller.workflow.sounds,
               "Busy sound controls do not interrupt another operation")
     controller.busy = false; controller.info = nil; controller.rebuild()
+    try check(!view.readerSoundButton.stateKnown && view.appSoundButton.stateKnown, "Unknown reader sound does not show a confirmed on/off state")
     try check(!view.readerSoundButton.isEnabled && view.appSoundButton.isEnabled,
               "App sound remains usable without a reader")
   }

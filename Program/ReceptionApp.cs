@@ -637,7 +637,7 @@ namespace Tobtech.OmnikeyRco
                         notice.Text = "Läsarprofilen kunde inte användas. Be IT kontrollera den via Hjälp.";
                     }
                 }
-                if (outputProtected && !reader.HasPendingRecovery) { try { readerSound = await Task.Run(delegate { return candidate.ReadReaderSound(); }); } catch { readerSound = null; } }
+                if (outputProtected && !reader.HasPendingRecovery) { try { readerSound = await Task.Run(delegate { return candidate.ReadReaderSound(); }); } catch (Exception soundError) { readerSound = null; SaveError(soundError, ConnectionPhase.ReadSoundState); } }
                 phase = ConnectionPhase.SavePreferences;
                 ReceptionFiles.SaveAddress(address); ReadyMessage();
             }

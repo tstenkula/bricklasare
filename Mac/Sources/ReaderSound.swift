@@ -135,6 +135,7 @@ enum ReaderSound {
 final class SoundButton: NSButton {
   var actionBlock: (() -> Void)?
   let readerIcon: Bool
+  var stateKnown = true { didSet { needsDisplay = true } }
   var muted = false { didSet { image = muted ? Self.offIcon : Self.onIcon } }
   var color = Theme.ink { didSet {
     contentTintColor = color
@@ -189,9 +190,16 @@ final class SoundButton: NSButton {
     // Fixed 44pt button: 4pt above a 20pt icon, 4pt before the 12pt text line.
     // Draw the original stock image; changing state never changes its layout slot.
     let icon = muted ? tintedOff : tintedOn
-    icon?.draw(in: NSRect(x: (bounds.width - 20) / 2, y: 4, width: 20, height: 20),
-               from: .zero, operation: .sourceOver, fraction: isEnabled ? 1 : 0.45,
-               respectFlipped: true, hints: nil)
+    if stateKnown {
+      icon?.draw(in: NSRect(x: (bounds.width - 20) / 2, y: 4, width: 20, height: 20),
+                 from: .zero, operation: .sourceOver, fraction: isEnabled ? 1 : 0.45,
+                 respectFlipped: true, hints: nil)
+    } else {
+      let centered = NSMutableParagraphStyle(); centered.alignment = .center
+      "…".draw(in: NSRect(x: 0, y: 4, width: bounds.width, height: 20),
+               withAttributes: [.font: NSFont.systemFont(ofSize: 14), .foregroundColor: Theme.muted,
+                                .paragraphStyle: centered])
+    }
     let paragraph = NSMutableParagraphStyle(); paragraph.alignment = .center
     title.draw(in: NSRect(x: 0, y: 28, width: bounds.width, height: 12),
                withAttributes: [.font: font ?? NSFont.systemFont(ofSize: 9),

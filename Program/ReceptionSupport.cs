@@ -50,6 +50,8 @@ namespace Tobtech.OmnikeyRco
             catch (Exception error) { report.Append("SavedUsbState: ").Append(ReceptionFiles.SafeError(error)).Append("\r\n"); }
             report.Append("ScanRecovery: ").Append(reader.HasPendingRecovery ? "Väntar" : "Ingen").Append("\r\n");
             report.Append("LocalProfile: ").Append(reader.CalibrationIssue != null ? "Behöver kontrolleras" : reader.Cal != null ? "Godkänd" : "Standardformat").Append("\r\n");
+            try { report.Append(reader.InspectReaderSound()).Append("\r\n"); }
+            catch (Exception error) { report.Append("ReaderSound: ").Append(ReceptionFiles.SafeError(error)).Append("\r\n"); }
             return report.ToString();
         }
         internal static string Code(Exception error)
@@ -66,6 +68,10 @@ namespace Tobtech.OmnikeyRco
                 case "Den avbrutna USB-förberedelsen kunde inte verifieras. Behåll konfigurationsfilerna och kontakta IT.": return "USB_PENDING_INVALID";
                 case "USB-konfigurationsfilen är för stor.": return "USB_STATE_SIZE";
                 case "USB-konfigurationsfilen kunde inte läsas.": return "USB_STATE_JSON";
+                case "Läsarens ljudformat stöds inte.": return "SOUND_TABLE_FORMAT";
+                case "Läsaren kunde inte lämna sitt ljudläge.": return "SOUND_TABLE_TYPE";
+                case "Den sparade ljudinställningen är ogiltig.": return "SOUND_BACKUP_SIZE";
+                case "Ljudinställningen gäller inte den här läsaren och firmware.": return "SOUND_BACKUP_IDENTITY";
                 case "För stort HTTP-huvud från läsaren.": return "HTTP_HEADER_SIZE";
                 case "Avklippt HTTP-svar från läsaren.": return "HTTP_LINE_TRUNCATED";
                 case "Ogiltigt HTTP-svar från läsaren.": return "HTTP_LINE_FORMAT";
