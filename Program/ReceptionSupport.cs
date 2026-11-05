@@ -655,6 +655,10 @@ namespace Tobtech.OmnikeyRco
                 check(!summary.Contains(Path.GetTempPath()));
             }
             check(mibRejected);
+            bool shortError = false;
+            try { Codec.MibResponse("02020104010100", Codec.Hex("0302009000")); }
+            catch (ReaderMibException missing) { shortError = missing.Status == 2 && missing.Index == 0 && missing.Command == "IndicatorSequences"; }
+            check(shortError);
             string unknown = ReceptionFiles.SafeError(new ReaderMibException(privateMessage, 2, 1));
             check(unknown.Contains("Other") && !unknown.Contains("01020304"));
             check(ReceptionFiles.SafeError(new IOException(privateMessage, new ReaderMibException("04010500", 2, 1))).Contains("UsbOutputMode"));

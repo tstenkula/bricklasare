@@ -92,8 +92,9 @@ namespace Tobtech.OmnikeyRco
         public static Tlv MibResponse(string oid, byte[] response)
         {
             byte[] p = Success(response);
-            if (p.Length < 7 || p[0] != 3) throw new FormatException("Oväntat MIB-svar.");
+            if (p.Length < 3 || p[0] != 3) throw new FormatException("Oväntat MIB-svar.");
             if (p[1] != 0) throw new ReaderMibException(oid, p[1], p[2]);
+            if (p.Length < 7) throw new FormatException("Avklippt MIB-värde.");
             int i = 3; Tlv name = ReadTlv(p, ref i); Tlv value = ReadTlv(p, ref i);
             if (name.Tag != 0x0D || ToHex(name.Value) != oid.ToUpperInvariant() || i != p.Length)
                 throw new FormatException("MIB-svaret motsvarar inte den begärda inställningen.");
