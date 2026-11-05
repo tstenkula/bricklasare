@@ -13,6 +13,7 @@ namespace Tobtech.OmnikeyRco
 
     // Only fixed codes and known source method names enter a shared report. No raw
     // exception messages, stack traces, file paths, HTTP headers or APDU bytes.
+    [Serializable]
     internal sealed class UsbModeShape
     {
         internal readonly string Type;
