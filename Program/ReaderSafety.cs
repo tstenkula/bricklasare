@@ -39,16 +39,24 @@ namespace Tobtech.OmnikeyRco
 
         // Preserve this validation boundary in privacy-safe diagnostic method names.
         [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
-        private static bool DecodeMode(Tlv state)
+        internal static bool DecodeMode(Tlv state)
         {
-            if (state == null || state.Tag != 2 || state.Value == null || state.Value.Length != 1 ||
-                (state.Value[0] != 0 && state.Value[0] != 255))
+            // Some readers return INTEGER with a leading zero octet. A width
+            // difference must not reject the documented values 0 and 255.
+            // Do not treat other nonzero values or byte-reversed data as enabled.
+            int value = -1;
+            if (state != null && state.Tag == 2 && state.Value != null)
+            {
+                if (state.Value.Length == 1) value = state.Value[0];
+                else if (state.Value.Length == 2 && state.Value[0] == 0) value = state.Value[1];
+            }
+            if (value != 0 && value != 255)
             {
                 InvalidDataException error = new InvalidDataException("Läsaren rapporterar ett okänt USB-läge. Förberedelsen kan inte godkännas.");
                 error.Data["Tobtech.UsbModeShape"] = new UsbModeShape(state);
                 throw error;
             }
-            return state.Value[0] == 255;
+            return value == 255;
         }
 
         public static bool IsCustomReport(ReaderClient reader)

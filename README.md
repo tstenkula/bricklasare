@@ -48,3 +48,5 @@ Version 3.6.1 adds actual download progress and rechecks operation ownership aft
 `SHA256SUMS.txt` covers repository files. Update feeds cover release archives. The release signing private key is never stored in this repository or in an application.
 
 Version 3.6.2 adds compact **Läsare** and **App** sound buttons. Reader beeps and app cues are independent. Reader changes preserve LED colours and timings, keep a per-reader recovery record, and verify the device state before displaying success. Physical buzzer acceptance is pending.
+
+Version 3.6.3 fixes Windows reader preparation when the USB-mode INTEGER uses a two-byte representation of the documented value. Unknown values and incorrect types remain blocked. The read-only connection diagnostic is available through `IT/Kontrollera-anslutning.cmd`; existing reader profiles and recovery files stay in place. The reported two-byte response is confirmed on a physical reader; successful preparation and scanning with the fix still require that reader test.

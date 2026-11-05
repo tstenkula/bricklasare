@@ -1,4 +1,4 @@
-BRICKLÄSAREN 3.6.2 – TESTSTATUS
+BRICKLÄSAREN 3.6.3 – TESTSTATUS
 
 Aktuella körningar och byggresultat:
 https://github.com/tstenkula/bricklasare/actions
