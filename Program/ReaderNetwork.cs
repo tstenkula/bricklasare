@@ -28,7 +28,7 @@
         internal IPAddress Address;
         internal IPAddress Mask;
     }
-    internal static class ReaderNetwork
+    internal static partial class ReaderNetwork
     {
         internal const string ConnectionHelp = "Läsarens USB-nätverksanslutning kunde inte verifieras. Anslut en OMNIKEY 5427 CK, kontrollera EEM-drivrutinen och läsarens IP-adress och försök igen. Anslutningen skickas inte via Wi-Fi, vanligt nätverk eller VPN.";
         private const int MaxBody = 16384, MaxHeaders = 8192;
@@ -232,6 +232,13 @@
         }
         internal static string ReadResponse(Stream input, Func<bool> expired)
         {
+            byte[] body = ReadResponseBytes(input, expired, MaxBody);
+            try { return new UTF8Encoding(false, true).GetString(body); }
+            catch (DecoderFallbackException ex) { throw new InvalidDataException("Ogiltig textkodning i läsarsvaret.", ex); }
+        }
+        private static byte[] ReadResponseBytes(Stream input, Func<bool> expired, int maximum)
+        {
+            if (maximum < 1 || maximum > 262144) throw new InvalidDataException("Ogiltig svarsstorlek.");
             int remaining = MaxHeaders;
             string status = Line(input, expired, ref remaining);
             if (!Regex.IsMatch(status, @"\AHTTP/1\.[01] 200(?: .*)?\z")) throw new InvalidDataException("Läsaren svarade inte OK.");
@@ -260,7 +267,7 @@
                         string chunk = Line(input, expired, ref remaining);
                         int semicolon = chunk.IndexOf(';'); if (semicolon >= 0) chunk = chunk.Substring(0, semicolon);
                         uint bytes;
-                        if (chunk.Length == 0 || chunk.Length > 8 || !UInt32.TryParse(chunk, NumberStyles.AllowHexSpecifier, CultureInfo.InvariantCulture, out bytes) || bytes > MaxBody - body.Length)
+                        if (chunk.Length == 0 || chunk.Length > 8 || !UInt32.TryParse(chunk, NumberStyles.AllowHexSpecifier, CultureInfo.InvariantCulture, out bytes) || bytes > maximum - body.Length)
                             throw new InvalidDataException("För stort eller ogiltigt läsarsvar.");
                         if (bytes == 0)
                         {
@@ -275,7 +282,7 @@
                 else if (length)
                 {
                     int bytes;
-                    if (!Int32.TryParse(size, NumberStyles.None, CultureInfo.InvariantCulture, out bytes) || bytes < 0 || bytes > MaxBody)
+                    if (!Int32.TryParse(size, NumberStyles.None, CultureInfo.InvariantCulture, out bytes) || bytes < 0 || bytes > maximum)
                         throw new InvalidDataException("För stort läsarsvar.");
                     CopyBytes(input, body, bytes, expired);
                 }
@@ -284,12 +291,11 @@
                     int b;
                     while ((b = ReadByte(input, expired)) >= 0)
                     {
-                        if (body.Length >= MaxBody) throw new InvalidDataException("För stort läsarsvar.");
+                        if (body.Length >= maximum) throw new InvalidDataException("För stort läsarsvar.");
                         body.WriteByte((byte)b);
                     }
                 }
-                try { return new UTF8Encoding(false, true).GetString(body.ToArray()); }
-                catch (DecoderFallbackException ex) { throw new InvalidDataException("Ogiltig textkodning i läsarsvaret.", ex); }
+                return body.ToArray();
             }
         }
     }

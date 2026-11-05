@@ -75,8 +75,18 @@ enum ReaderSound {
     try check(reader)
     var current = try table(reader)
     if var saved = try backup(reader), let pending = saved.Pending {
-      current.replaceSubrange(0..<39, with: try Codec.hex(pending))
-      try write(current, reader)
+      var target = current
+      target.replaceSubrange(0..<39, with: try Codec.hex(pending))
+      try validate(target)
+      // Replay only buzzer bits; stale LEDs, durations and repeat counts must not
+      // overwrite an external sequence edit made after an interrupted operation.
+      for i in 0..<39 {
+        let mask: UInt8 = i % 13 < 12 && (i % 13) % 2 == 0 ? 0xEF : 0xFF
+        try require(current[i] & mask == target[i] & mask,
+          "Läsarens ljus- eller ljudsekvens har ändrats utanför appen. Kontrollera inställningarna innan ljudet återställs.")
+      }
+      try write(target, reader)
+      current = target
       saved.Pending = nil
       try reader.store.write(name(reader), saved)
     }

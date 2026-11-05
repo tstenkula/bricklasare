@@ -639,6 +639,31 @@
                 fake.SoundFailure = 1;
                 bool failed = false; try { reader.SetReaderSound(false); } catch (IOException) { failed = true; }
                 Check(failed && original.SequenceEqual(fake.SoundTable) && reader.ReadReaderSound(), "Partial and ambiguous writes roll back before reporting failure");
+                string soundPath = Path.Combine(local, "lasarljud-" + reader.ReaderId + ".json");
+                var soundJson = new System.Web.Script.Serialization.JavaScriptSerializer();
+                ReaderSoundBackup pendingSound = new ReaderSoundBackup { Schema = 1, ReaderId = reader.ReaderId, Firmware = reader.Firmware,
+                    Original = Codec.ToHex(original.Take(39).ToArray()), Pending = Codec.ToHex(original.Take(39).ToArray()) };
+                foreach (int changedIndex in new int[] { 0, 1, 12 })
+                {
+                    byte[] changed = (byte[])muted.Clone(); changed[changedIndex] ^= 1; fake.SoundTable = (byte[])changed.Clone();
+                    string saved = soundJson.Serialize(pendingSound); File.WriteAllText(soundPath, saved); writes = fake.Writes;
+                    Reject(delegate { reader.ReadReaderSound(); }, "Pending sound recovery rejects changed LEDs, durations and repeat counts");
+                    Check(fake.Writes == writes && fake.SoundTable.SequenceEqual(changed) && File.ReadAllText(soundPath) == saved,
+                        "Rejected sound recovery preserves live sequences and the pending journal without writes");
+                }
+                byte[] badPending = original.Take(39).ToArray(); badPending[0] |= 0x80;
+                pendingSound.Pending = Codec.ToHex(badPending); fake.SoundTable = (byte[])muted.Clone();
+                string damaged = soundJson.Serialize(pendingSound); File.WriteAllText(soundPath, damaged); writes = fake.Writes;
+                Reject(delegate { reader.ReadReaderSound(); }, "Corrupt pending sound flags cannot enter a reader command");
+                Check(fake.Writes == writes && fake.SoundTable.SequenceEqual(muted) && File.ReadAllText(soundPath) == damaged,
+                    "Corrupt pending sound data remains available for investigation without reader writes");
+                pendingSound.Pending = Codec.ToHex(original.Take(39).ToArray()); File.WriteAllText(soundPath, soundJson.Serialize(pendingSound));
+                fake.SoundTable = (byte[])muted.Clone(); fake.SoundTable[39] ^= 1;
+                byte[] expectedRecovery = (byte[])fake.SoundTable.Clone(); Array.Copy(original, expectedRecovery, 39);
+                Check(reader.ReadReaderSound() && fake.SoundTable.SequenceEqual(expectedRecovery),
+                    "Matching pending sound recovery restores buzzer state and preserves current internal sequences");
+                ReaderSoundBackup recovered = soundJson.Deserialize<ReaderSoundBackup>(File.ReadAllText(soundPath));
+                Check(String.IsNullOrEmpty(recovered.Pending), "Pending sound journal clears only after matching readback");
                 Check(WorkflowSettings.Load(local).Sounds == false && reader.ReadReaderSound(), "Hardware sound and app preference are independent");
                 string journal = Path.Combine(local, "aterstall-" + reader.ReaderId + ".json"); File.WriteAllText(journal, "pending");
                 writes = fake.Writes; failed = false; try { reader.SetReaderSound(false); } catch (InvalidOperationException) { failed = true; }

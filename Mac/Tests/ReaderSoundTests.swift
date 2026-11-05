@@ -22,10 +22,48 @@ extension SelfTests {
                 "Partial writes roll back before reporting failure")
       let saved = ReaderSoundBackup(ReaderId: reader.id, Firmware: reader.firmware,
         Original: Codec.text(Array(original.prefix(39))), Pending: Codec.text(Array(original.prefix(39))))
+      for changedIndex in [0, 1, 12] {
+        var changed = quiet
+        changed[changedIndex] ^= 1
+        mock.settings[ReaderSound.oid]!.value = changed
+        try store.write(ReaderSound.name(reader), saved)
+        let journalBytes = try Data(contentsOf: store.url(ReaderSound.name(reader)))
+        let mutations = mock.mutations
+        try rejects("Pending sound recovery rejects external LED, timing and repeat changes") {
+          _ = try ReaderSound.read(reader)
+        }
+        try check(mock.mutations == mutations && mock.settings[ReaderSound.oid]!.value == changed
+          && (try Data(contentsOf: store.url(ReaderSound.name(reader)))) == journalBytes,
+          "Rejected recovery preserves live state and the pending journal without writes")
+      }
+      var damaged = saved
+      var badPending = Array(original.prefix(39))
+      badPending[0] |= 0x80
+      damaged.Pending = Codec.text(badPending)
+      mock.settings[ReaderSound.oid]!.value = quiet
+      try store.write(ReaderSound.name(reader), damaged)
+      let damagedBytes = try Data(contentsOf: store.url(ReaderSound.name(reader)))
+      let beforeDamaged = mock.mutations
+      try rejects("Corrupt pending sound flags never enter a reader command") {
+        _ = try ReaderSound.read(reader)
+      }
+      try check(mock.mutations == beforeDamaged && mock.settings[ReaderSound.oid]!.value == quiet
+        && (try Data(contentsOf: store.url(ReaderSound.name(reader)))) == damagedBytes,
+        "Corrupt pending sound state remains available without reader writes")
       try store.write(ReaderSound.name(reader), saved)
       mock.settings[ReaderSound.oid]!.value = quiet
       try check(try ReaderSound.read(reader) && mock.settings[ReaderSound.oid]!.value == original,
                 "Crash journal restores sound at next connection")
+      try store.write(ReaderSound.name(reader), saved)
+      var changedInternal = quiet
+      changedInternal[39] ^= 1
+      mock.settings[ReaderSound.oid]!.value = changedInternal
+      var expectedRecovery = changedInternal
+      expectedRecovery.replaceSubrange(0..<39, with: original.prefix(39))
+      try check(try ReaderSound.read(reader) && mock.settings[ReaderSound.oid]!.value == expectedRecovery,
+        "Matching recovery restores buzzer state and preserves current internal sequences")
+      let recovered: ReaderSoundBackup = try store.read(ReaderSound.name(reader))
+      try check(recovered.Pending == nil, "Pending journal clears only after matching readback")
       try check(!WorkflowSettings.load(store).sounds, "Hardware changes do not enable app sounds")
       try store.remove(ReaderSound.name(reader))
       mock.settings[ReaderSound.oid]!.value = quiet
