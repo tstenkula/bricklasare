@@ -424,7 +424,7 @@ final class ReaderView {
     appSoundButton.muted = !c.workflow.sounds
     appSoundButton.isEnabled = !c.busy
     readerSoundButton.color = theme.accent; appSoundButton.color = theme.accent
-    let readerSoundText = c.readerSound.map { "Läsarens pip: \($0 ? "på. Klicka för att stänga av." : "av. Klicka för att slå på.")" } ?? "Läsarens pip: läget är inte tillgängligt. Anslut läsaren igen."
+    let readerSoundText = c.readerSound.map { "Läsarens pip: \($0 ? "på. Klicka för att stänga av." : "av. Klicka för att slå på.")" } ?? c.info?.soundExplanation ?? "Läsarens pip: anslut läsaren för att kontrollera ljudläget."
     let appSoundText = "Appens ljud: \(c.workflow.sounds ? "på. Klicka för att stänga av." : "av. Klicka för att slå på.")"
     readerSoundButton.toolTip = readerSoundText; readerSoundButton.setAccessibilityLabel(readerSoundText)
     appSoundButton.toolTip = appSoundText; appSoundButton.setAccessibilityLabel(appSoundText)
@@ -715,11 +715,12 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
           }
         }
         self.engine = reader
-        let info = reader.info
         let sound: Bool?
         let soundProblem: Bool
         do { sound = try ReaderSound.read(reader); soundProblem = false }
+        catch let error as ReaderError where error.code == "SOUND_UNSUPPORTED" { sound = nil; soundProblem = false }
         catch { sound = nil; soundProblem = true }
+        let info = reader.info
         DispatchQueue.main.async {
           if soundProblem { self.latestErrorCode = "SOUND_READ" }
           self.completeConnection(info, sound: sound)

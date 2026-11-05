@@ -38,9 +38,17 @@ enum ReaderSound {
   }
   static func name(_ reader: ReaderEngine) -> String { "lasarljud-\(reader.id).json" }
   static func table(_ reader: ReaderEngine) throws -> [UInt8] {
-    let value = try reader.get(oid)
+    guard let compatibility = reader.compatibility else { throw fail("IDENTITY", "Anslut läsaren först.") }
+    try compatibility.beginSoundProbe()
+    let value: TLV
+    do { value = try reader.get(oid) }
+    catch let error as ReaderError where error.mibStatus == 2 {
+      compatibility.missingSoundTable()
+      throw fail("SOUND_UNSUPPORTED", compatibility.soundExplanation)
+    }
     try require(value.tag == 4, "Läsaren kunde inte lämna sitt ljudläge.", code: "SOUND_FORMAT")
     try validate(value.value)
+    compatibility.confirmSoundTable()
     return value.value
   }
   static func backup(_ reader: ReaderEngine) throws -> ReaderSoundBackup? {
@@ -57,6 +65,8 @@ enum ReaderSound {
     try reader.checkIdentity()
   }
   static func write(_ target: [UInt8], _ reader: ReaderEngine) throws {
+    guard let compatibility = reader.compatibility else { throw fail("IDENTITY", "Anslut läsaren först.") }
+    try compatibility.requireSoundWrite()
     try validate(target)
     for sequence in 0..<3 {
       try check(reader)

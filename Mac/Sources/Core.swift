@@ -3,6 +3,7 @@ import Foundation
 struct ReaderError: Error, LocalizedError {
   let code: String
   let message: String
+  var mibStatus: UInt8? = nil
   var errorDescription: String? { message }
 }
 func fail(_ code: String, _ message: String) -> ReaderError {
@@ -67,6 +68,9 @@ enum Codec {
   }
   static func mibResponse(_ oid: String, _ response: [UInt8]) throws -> TLV {
     let data = try success(response)
+    if data.count >= 3 && data[0] == 3 && data[1] != 0 {
+      throw ReaderError(code: "MIB", message: "Läsaren stöder inte den begärda inställningen.", mibStatus: data[1])
+    }
     try require(
       data.count >= 7 && data[0] == 3 && data[1] == 0,
       "Läsaren stöder inte den begärda inställningen.", code: "MIB")
@@ -324,6 +328,42 @@ struct ScanResult {
     }
   }
 }
+enum ReaderGeneration { case gen1, gen2 }
+enum ReaderSoundMethod { case probeRequired, sequenceTable130, legacyNotImplemented, unavailable }
+final class ReaderCompatibility {
+  let generation: ReaderGeneration
+  let firmwareHex: String
+  var firmwareDisplay: String {
+    let b = Array(firmwareHex)
+    return String(b[0..<2]) + "." + String(b[2..<4]) + "." + String(b[4..<8])
+  }
+  private(set) var soundMethod: ReaderSoundMethod
+  var soundExplanation: String {
+    switch soundMethod {
+    case .legacyNotImplemented:
+      return "Läsarens pip: Gen1 med firmware \(firmwareDisplay) behöver en annan ljudmetod som ännu inte finns i appen."
+    case .unavailable: return "Läsarens pip: ljudinställningen saknas i den anslutna läsarens gränssnitt."
+    default: return "Läsarens pip: ljudläget har inte kunnat verifieras. Försök ansluta igen."
+    }
+  }
+  init(board: UInt8, firmware: [UInt8]) throws {
+    try require((board == 6 || board == 10) && firmware.count == 4, "Läsarens kompatibilitet kunde inte fastställas.")
+    generation = board == 6 ? .gen1 : .gen2
+    firmwareHex = Codec.text(firmware)
+    // Exact observed combination. No version-range or Gen2 support assumptions.
+    soundMethod = board == 6 && firmwareHex == "04020100" ? .legacyNotImplemented : .probeRequired
+  }
+  func beginSoundProbe() throws {
+    try require(soundMethod != .legacyNotImplemented && soundMethod != .unavailable,
+                soundExplanation, code: "SOUND_UNSUPPORTED")
+    soundMethod = .probeRequired
+  }
+  func confirmSoundTable() { soundMethod = .sequenceTable130 }
+  func missingSoundTable() { soundMethod = .unavailable }
+  func requireSoundWrite() throws {
+    try require(soundMethod == .sequenceTable130, soundExplanation, code: "SOUND_UNSUPPORTED")
+  }
+}
 struct ReaderInfo {
   var board: String
   var id: String
@@ -331,6 +371,7 @@ struct ReaderInfo {
   var profile: String
   var pending: Bool
   var ready: Bool
+  var soundExplanation: String? = nil
 }
 final class ReaderEngine {
   static let polls = [
@@ -344,6 +385,7 @@ final class ReaderEngine {
   var delay: (Double) -> Void = { Thread.sleep(forTimeInterval: $0) }
   var waitDelay: Double = 0.35
   private(set) var id = "", firmware = "", board = ""
+  private(set) var compatibility: ReaderCompatibility?
   private(set) var calibration: Calibration?
   private(set) var profileIssue: String?
   private(set) var connected = false
@@ -361,7 +403,7 @@ final class ReaderEngine {
     ReaderInfo(
       board: board, id: id, firmware: firmware,
       profile: profileIssue ?? (calibration == nil ? "Standardformat" : "Verifierad lokal profil"),
-      pending: pending, ready: ready)
+      pending: pending, ready: ready, soundExplanation: compatibility?.soundExplanation)
   }
   func send(_ command: [UInt8]) throws -> [UInt8] {
     log.add("TX antal byte: \(command.count)")
@@ -390,6 +432,7 @@ final class ReaderEngine {
   }
   func connect() throws {
     connected = false
+    compatibility = nil
     protectedOutput = false
     calibration = nil
     profileIssue = nil
@@ -404,6 +447,7 @@ final class ReaderEngine {
       fw.tag == 2 && fw.value.count == 4 && identifier.tag == 4 && identifier.value.count == 16,
       "Läsarens identitet kunde inte verifieras.")
     firmware = Codec.text(fw.value)
+    compatibility = try ReaderCompatibility(board: b.value[0], firmware: fw.value)
     id = Codec.text(identifier.value)
     _ = try readSettings()
     _ = try transport.present()

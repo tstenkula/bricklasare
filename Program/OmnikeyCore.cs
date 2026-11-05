@@ -241,6 +241,40 @@ namespace Tobtech.OmnikeyRco
             lock (gate) return "OMNIKEY RCO v2.0 testversion\r\n" + DateTime.Now.ToString("s") + "\r\n" + String.Join("\r\n", lines.ToArray());
         }
     }
+    public enum ReaderGeneration { Gen1, Gen2 }
+    public enum ReaderSoundMethod { ProbeRequired, SequenceTable130, LegacyNotImplemented, Unavailable }
+    public sealed class ReaderCompatibility
+    {
+        public ReaderGeneration Generation { get; private set; }
+        public string FirmwareHex { get; private set; }
+        public string FirmwareDisplay { get { return FirmwareHex.Substring(0, 2) + "." + FirmwareHex.Substring(2, 2) + "." + FirmwareHex.Substring(4); } }
+        public ReaderSoundMethod SoundMethod { get; private set; }
+        public string SoundExplanation { get { return SoundMethod == ReaderSoundMethod.LegacyNotImplemented ?
+            "Läsarens pip: Gen1 med firmware " + FirmwareDisplay + " behöver en annan ljudmetod som ännu inte finns i appen." :
+            SoundMethod == ReaderSoundMethod.Unavailable ? "Läsarens pip: ljudinställningen saknas i den anslutna läsarens gränssnitt." :
+            "Läsarens pip: ljudläget har inte kunnat verifieras. Försök ansluta igen."; } }
+        internal ReaderCompatibility(byte board, byte[] firmware)
+        {
+            if ((board != 6 && board != 10) || firmware == null || firmware.Length != 4)
+                throw new InvalidDataException("Läsarens kompatibilitet kunde inte fastställas.");
+            Generation = board == 6 ? ReaderGeneration.Gen1 : ReaderGeneration.Gen2;
+            FirmwareHex = Codec.ToHex(firmware);
+            // Exact observed combination, not an inferred firmware-version range.
+            SoundMethod = board == 6 && FirmwareHex == "04020100" ? ReaderSoundMethod.LegacyNotImplemented : ReaderSoundMethod.ProbeRequired;
+        }
+        internal void BeginSoundProbe()
+        {
+            if (SoundMethod == ReaderSoundMethod.LegacyNotImplemented || SoundMethod == ReaderSoundMethod.Unavailable)
+                throw new NotSupportedException(SoundExplanation);
+            SoundMethod = ReaderSoundMethod.ProbeRequired;
+        }
+        internal void ConfirmSoundTable() { SoundMethod = ReaderSoundMethod.SequenceTable130; }
+        internal void MissingSoundTable() { SoundMethod = ReaderSoundMethod.Unavailable; }
+        internal void RequireSoundWrite()
+        {
+            if (SoundMethod != ReaderSoundMethod.SequenceTable130) throw new NotSupportedException(SoundExplanation);
+        }
+    }
     public sealed partial class ReaderClient
     {
         public const string AskDataOid = "040C0200";
@@ -259,6 +293,7 @@ namespace Tobtech.OmnikeyRco
         public string ReaderId { get; private set; }
         public string Firmware { get; private set; }
         public string Board { get; private set; }
+        public ReaderCompatibility Compatibility { get; private set; }
         public Calibration Cal { get; private set; }
         public bool Connected { get; private set; }
         public string CalibrationIssue { get; private set; }
@@ -321,7 +356,7 @@ namespace Tobtech.OmnikeyRco
         }
         public void Connect()
         {
-            Connected = false; Cal = null; CalibrationIssue = null;
+            Connected = false; Cal = null; CalibrationIssue = null; Compatibility = null;
             Tlv board = GetMib("010200");
             if (board.Tag != 2 || board.Value.Length != 1 || (board.Value[0] != 6 && board.Value[0] != 10))
                 throw new NotSupportedException("Programmet stöder OMNIKEY 5427 CK och 5427 CK Gen2. Den anslutna modellen stöds inte.");
@@ -329,6 +364,7 @@ namespace Tobtech.OmnikeyRco
             Tlv fw = GetMib("010100");
             if (fw.Tag != 2 || fw.Value.Length != 4) throw new FormatException("Oväntad firmwareidentifiering.");
             Firmware = Codec.ToHex(fw.Value);
+            Compatibility = new ReaderCompatibility(board.Value[0], fw.Value);
             Tlv id = GetMib("010A00");
             if (id.Tag != 4 || id.Value.Length != 16) throw new FormatException("Läsarens unika ID kunde inte verifieras.");
             ReaderId = Codec.ToHex(id.Value);

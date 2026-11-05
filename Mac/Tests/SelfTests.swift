@@ -5,6 +5,7 @@ final class MockReader: ReaderTransport {
   let name = "OMNIKEY simulated"
   static let identity = Array(UInt8(1)...UInt8(16))
   var settings: [String: TLV] = [:], mutations = 0, presentValue = false, reads = 0, closed = false
+  var missingSound = false, soundReadFailure = false, soundReads = 0
   var soundFailure: Int?
   var readFailure = false, unstable = false, recoveryFailure = false, changingIdentity = false
   init(board: UInt8 = 6) {
@@ -51,6 +52,11 @@ final class MockReader: ReaderTransport {
       mutations += 1
       if recoveryFailure { throw fail("SIMULATED_WRITE", "Simulated restore failure") }
       settings[oid] = TLV(tag: tag, value: Array(b[(12 + length)..<(12 + length + n)]))
+    }
+    if oid == ReaderSound.oid && b[5] != 2 {
+      soundReads += 1
+      if soundReadFailure { throw fail("SIMULATED_SOUND_READ", "Temporary transport failure") }
+      if missingSound { return [3, 2, 0, 0x90, 0] }
     }
     guard var t = settings[oid] else { throw fail("SIMULATED_OID", "Unexpected OID") }
     if changingIdentity && oid == "010A00" { t.value = Array(repeating: 42, count: 16) }

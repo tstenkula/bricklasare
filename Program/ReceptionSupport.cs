@@ -38,7 +38,8 @@ namespace Tobtech.OmnikeyRco
             report.Append("Tid: ").Append(DateTime.Now.ToString("s")).Append("\r\n");
             report.Append("Kontrollen läser inställningar. Den ändrar inte läsaren.\r\n");
             report.Append("Inga bricknummer, läsar-ID, råsvar eller sökvägar ingår.\r\n\r\n");
-            try { reader.Connect(); report.Append("IdentifyReader: OK\r\n"); }
+            try { reader.Connect(); report.Append("IdentifyReader: OK\r\n");
+                report.Append("ReaderGeneration: ").Append(reader.Compatibility.Generation).Append("\r\nFirmware: ").Append(reader.Compatibility.FirmwareDisplay).Append("\r\n"); }
             catch (Exception error) { report.Append("IdentifyReader: ").Append(ReceptionFiles.SafeError(error)).Append("\r\n"); return report.ToString(); }
             try
             {
