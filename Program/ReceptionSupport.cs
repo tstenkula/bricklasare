@@ -13,6 +13,22 @@ namespace Tobtech.OmnikeyRco
 
     // Only fixed codes and known source method names enter a shared report. No raw
     // exception messages, stack traces, file paths, HTTP headers or APDU bytes.
+    internal sealed class UsbModeShape
+    {
+        internal readonly string Type;
+        internal readonly int Length;
+        internal readonly string Value;
+        internal UsbModeShape(Tlv mode)
+        {
+            Type = mode == null ? "Missing" : mode.Tag == 1 ? "Boolean" : mode.Tag == 2 ? "Integer" : mode.Tag == 4 ? "OctetString" : "Other";
+            Length = mode == null || mode.Value == null ? -1 : mode.Value.Length;
+            // Only three fixed, non-identifying mode values are described. Other
+            // payloads stay private, even if a faulty device returns unrelated data.
+            Value = Length == 1 && mode.Value[0] == 0 ? "00" : Length == 1 && mode.Value[0] == 1 ? "01" :
+                Length == 1 && mode.Value[0] == 255 ? "FF" : "Other";
+        }
+    }
+
     internal static class ReaderDiagnostics
     {
         internal static string Inspect(ReaderClient reader)
@@ -298,6 +314,9 @@ namespace Tobtech.OmnikeyRco
                 string code = ReaderDiagnostics.Code(current), source = ReaderDiagnostics.Source(current);
                 if (code != null) text.Append(" [orsak ").Append(code).Append("]");
                 if (source.Length != 0) text.Append(" [steg ").Append(source).Append("]");
+                UsbModeShape shape = current.Data["Tobtech.UsbModeShape"] as UsbModeShape;
+                if (code == "USB_MODE_RESPONSE" && shape != null) text.Append(" [USB-format ").Append(shape.Type)
+                    .Append("; längd ").Append(shape.Length).Append("; värde ").Append(shape.Value).Append("]");
                 ReaderMibException mib = current as ReaderMibException;
                 if (mib != null) text.Append(" [kommando ").Append(mib.Command).Append("; MIB-status ")
                     .Append(mib.Status).Append("; index ").Append(mib.Index).Append("]");

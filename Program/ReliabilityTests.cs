@@ -634,7 +634,7 @@
             Check(report.Contains("USB_PENDING_INVALID") && fake.Writes == 0, "Mismatched pending state is identified without recovery writes");
             File.Delete(pendingPath);
             fake.BadUsbMode = true; report = ReaderDiagnostics.Inspect(reader);
-            Check(report.Contains("USB_MODE_RESPONSE") && report.Contains("ReaderSafety.DecodeMode") && report.Contains("UsbOriginal:"), "Invalid mode is distinguished from local state and does not stop independent checks");
+            Check(report.Contains("USB_MODE_RESPONSE") && report.Contains("USB-format Integer; längd 1; värde 01") && report.Contains("ReaderSafety.DecodeMode") && report.Contains("UsbOriginal:"), "Invalid mode is distinguished from local state and does not stop independent checks");
             Check(fake.Writes == 0 && Directory.GetFiles(directory).Length == 0, "All diagnostic error paths remain read only");
         }
         private sealed class FakeReader

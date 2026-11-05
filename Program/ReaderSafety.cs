@@ -41,7 +41,11 @@ namespace Tobtech.OmnikeyRco
         {
             if (state == null || state.Tag != 2 || state.Value == null || state.Value.Length != 1 ||
                 (state.Value[0] != 0 && state.Value[0] != 255))
-                throw new InvalidDataException("Läsaren rapporterar ett okänt USB-läge. Förberedelsen kan inte godkännas.");
+            {
+                InvalidDataException error = new InvalidDataException("Läsaren rapporterar ett okänt USB-läge. Förberedelsen kan inte godkännas.");
+                error.Data["Tobtech.UsbModeShape"] = new UsbModeShape(state);
+                throw error;
+            }
             return state.Value[0] == 255;
         }
 
