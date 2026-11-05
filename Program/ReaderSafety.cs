@@ -37,6 +37,8 @@ namespace Tobtech.OmnikeyRco
         private static readonly object Gate = new object();
         private static readonly Dictionary<string, string[]> LegacyIdentities = new Dictionary<string, string[]>();
 
+        // Preserve this validation boundary in privacy-safe diagnostic method names.
+        [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
         private static bool DecodeMode(Tlv state)
         {
             if (state == null || state.Tag != 2 || state.Value == null || state.Value.Length != 1 ||
