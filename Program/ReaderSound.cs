@@ -41,9 +41,18 @@
         }
         private byte[] ReadSoundTable()
         {
-            Tlv value = GetMib(SoundOid);
+            if (Compatibility == null) throw new InvalidOperationException("Anslut läsaren först.");
+            Compatibility.BeginSoundProbe();
+            Tlv value;
+            try { value = GetMib(SoundOid); }
+            catch (ReaderMibException error)
+            {
+                if (error.Status != 2) throw;
+                Compatibility.MissingSoundTable();
+                throw new NotSupportedException(Compatibility.SoundExplanation, error);
+            }
             if (value.Tag != 4) throw new InvalidDataException("Läsaren kunde inte lämna sitt ljudläge.");
-            ValidateSound(value.Value); return value.Value;
+            ValidateSound(value.Value); Compatibility.ConfirmSoundTable(); return value.Value;
         }
         internal static bool HasSound(byte[] table)
         {
@@ -64,6 +73,8 @@
         }
         private void WriteSoundTable(byte[] target)
         {
+            if (Compatibility == null) throw new InvalidOperationException("Anslut läsaren först.");
+            Compatibility.RequireSoundWrite();
             ValidateSound(target); CheckSoundIdentity();
             // Store and automatic-control commands must be separate. Never run a test beep.
             for (int sequence = 0; sequence < 3; sequence++)
@@ -86,16 +97,16 @@
         {
             // Read-only diagnostic: never invoke pending-sound recovery here.
             CheckSoundIdentity();
-            ReaderSoundBackup backup = ReadSoundBackup();
             byte[] table = ReadSoundTable();
+            ReaderSoundBackup backup = ReadSoundBackup();
             return "ReaderSound: " + (HasSound(table) ? "På" : "Av") + "\r\nSoundRecovery: " +
                 (backup != null && !String.IsNullOrEmpty(backup.Pending) ? "Väntar" : "Ingen");
         }
         internal bool ReadReaderSound()
         {
             CheckSoundIdentity();
-            ReaderSoundBackup backup = ReadSoundBackup();
             byte[] table = ReadSoundTable();
+            ReaderSoundBackup backup = ReadSoundBackup();
             if (backup != null && !String.IsNullOrEmpty(backup.Pending))
             {
                 byte[] target = (byte[])table.Clone();
@@ -231,7 +242,7 @@
         {
             readerSoundButton.StateKnown = readerSound.HasValue; readerSoundButton.Muted = readerSound == false; readerSoundButton.Enabled = !busy && IsReady && readerSound.HasValue;
             appSoundButton.Muted = !workflow.Sounds; appSoundButton.Enabled = !busy;
-            string r = readerSound.HasValue ? "Läsarens pip: " + (readerSound.Value ? "på. Klicka för att stänga av." : "av. Klicka för att slå på.") : "Läsarens pip: ljudläget kunde inte bekräftas. Spara en felrapport via Hjälp om läsaren är ansluten.";
+            string r = readerSound.HasValue ? "Läsarens pip: " + (readerSound.Value ? "på. Klicka för att stänga av." : "av. Klicka för att slå på.") : reader != null && reader.Compatibility != null ? reader.Compatibility.SoundExplanation : "Läsarens pip: anslut läsaren för att kontrollera ljudläget.";
             string a = "Appens ljud: " + (workflow.Sounds ? "på. Klicka för att stänga av." : "av. Klicka för att slå på.");
             readerSoundButton.AccessibleName = r; appSoundButton.AccessibleName = a;
             soundTips.SetToolTip(readerSoundButton, r); soundTips.SetToolTip(appSoundButton, a);

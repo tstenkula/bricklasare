@@ -33,3 +33,11 @@ Det separata Windows-verktyget i `tools/reader-ui-inspection/` hämtar startsida
 För utvecklare: `tools/test-reader-ui-inspection.ps1` kör helt frikopplade tester. `tools/build-reader-ui-inspection.ps1` bygger det separata paketet från en explicit fillista. Verktyget ingår inte i appens vanliga paket eller startflöde. Mac-appen använder CCID; Windows-verktyget ger inte i sig verifierat Mac-stöd för Gen1-ljud.
 
 Vid återställning av en avbruten ljudändring jämför appen dessutom aktuella LED-värden, tider och repetitionsantal med den sparade återställningsposten. Om de har ändrats externt stoppas återställningen utan skrivning och posten behålls, så att senare ljusinställningar inte skrivs över.
+
+## Val av kommandometod
+
+Windows och Mac skapar en ny kompatibilitetsprofil vid varje anslutning. Modellkoden skiljer Gen1 från Gen2. Firmware behålls exakt som fyra byte; visningen 04.02.0100 innebär inte att godtyckliga versioner kan rangordnas eller att högre versionsnummer automatiskt ger fler funktioner.
+
+Den observerade kombinationen Gen1 + 04020100 använder äldre ljudinställningar vars läs-/skrivmetod ännu inte är införd. Den får en förklaring i ljudknappens hjälptext utan att den moderna ljudfrågan skickas. Andra kombinationer börjar med okänt stöd: en ren läsning måste ge den validerade 130-bytetabellen innan sekvensmetoden får skriva. Ett uttryckligt noSuchName-svar spärrar metoden under den anslutningen. Transportfel och okända tabellformat räknas inte som verifierat stöd. Återanslutning eller ny firmware kräver en ny profil och kontroll.
+
+Läsning av brickor och USB-förberedelse använder fortfarande sina gemensamma, svarskontrollerade protokoll. Ingen alternativ kommandoföljd för äldre ljud eller egen firmware har gissats fram. Insamlingen behövs för att fastställa och införa just den alternativa Gen1-ljudmetoden.

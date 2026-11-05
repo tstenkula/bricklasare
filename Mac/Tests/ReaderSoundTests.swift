@@ -6,6 +6,46 @@ extension SelfTests {
       let store = try tempStore()
       defer { try? FileManager.default.removeItem(at: store.root) }
       let (reader, mock) = try engine(store, board: board)
+      mock.settings["010100"] = TLV(tag: 2, value: [4, 2, 1, 0])
+      try reader.connect()
+      try check(reader.compatibility?.firmwareDisplay == "04.02.0100" && reader.compatibility?.generation == (board == 6 ? .gen1 : .gen2), "Generation and firmware are independent")
+      let before = mock.mutations
+      if board == 6 {
+        try rejects("Known legacy firmware is blocked") { _ = try ReaderSound.set(false, reader) }
+        try check(mock.mutations == before && mock.soundReads == 0 && reader.compatibility?.soundMethod == .legacyNotImplemented, "Legacy sound never writes modern sequences")
+      } else {
+        try check(try !ReaderSound.set(false, reader), "Same firmware on Gen2 requires a real table probe")
+      }
+      mock.settings["010100"] = TLV(tag: 2, value: [255, 255, 255, 255])
+      try reader.connect()
+      try check(reader.compatibility?.soundMethod == .probeRequired, "Unknown firmware and reconnect reset capabilities")
+      let writes = mock.mutations
+      mock.soundReadFailure = true
+      try rejects("Transient read failure") { _ = try ReaderSound.read(reader) }
+      try check(reader.compatibility?.soundMethod == .probeRequired && mock.mutations == writes, "Transport failure does not mean unsupported")
+      mock.soundReadFailure = false
+      mock.missingSound = true
+      let reads = mock.soundReads
+      try rejects("Missing MIB routed to unavailable") { _ = try ReaderSound.read(reader) }
+      try rejects("Unavailable method cannot write") { _ = try ReaderSound.set(false, reader) }
+      try check(mock.soundReads == reads + 1 && mock.mutations == writes && reader.compatibility?.soundMethod == .unavailable,
+                "Missing capability is cached for this connection without writes")
+      mock.missingSound = false
+      try reader.connect()
+      mock.settings[ReaderSound.oid]!.value = [UInt8](repeating: 0, count: 129)
+      try rejects("Unknown schema is not support") { _ = try ReaderSound.read(reader) }
+      try check(reader.compatibility?.soundMethod == .probeRequired && mock.mutations == writes, "Malformed table never permits writes")
+      let profile = try ReaderCompatibility(board: board, firmware: [255, 255, 255, 255])
+      try rejects("Unverified profile forbids writes") { try profile.requireSoundWrite() }
+      profile.missingSoundTable()
+      try rejects("Missing MIB forbids repeated probes") { try profile.beginSoundProbe() }
+      do { _ = try Codec.mibResponse(ReaderSound.oid, [3, 2, 0, 0x90, 0]) }
+      catch let error as ReaderError { try check(error.mibStatus == 2, "Missing MIB status preserved for capability routing") }
+    }
+    for board: UInt8 in [6, 10] {
+      let store = try tempStore()
+      defer { try? FileManager.default.removeItem(at: store.root) }
+      let (reader, mock) = try engine(store, board: board)
       let original = mock.settings[ReaderSound.oid]!.value
       try check(try ReaderSound.read(reader), "Hardware sound is read independently of computer volume")
       try check(try !ReaderSound.set(false, reader), "Reader mute confirmed")

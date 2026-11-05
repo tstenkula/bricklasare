@@ -623,6 +623,31 @@
         private static void ExerciseReaderSound(string directory)
         {
             Directory.CreateDirectory(directory);
+            foreach (byte model in new byte[] { 6, 10 })
+            {
+                string path = Path.Combine(directory, "compat-" + model); Directory.CreateDirectory(path);
+                FakeReader probe = new FakeReader { Board = model, Firmware = "04020100" };
+                ReaderClient client = new ReaderClient("192.168.63.99", path, new LocalLog()); client.TestTransport = probe.Send; client.Connect();
+                Check(client.Compatibility.FirmwareDisplay == "04.02.0100" && client.Compatibility.Generation == (model == 6 ? ReaderGeneration.Gen1 : ReaderGeneration.Gen2), "Generation and firmware are decoded independently");
+                bool blocked = false; try { client.SetReaderSound(false); } catch (NotSupportedException) { blocked = true; }
+                Check(model == 6 ? blocked && probe.SoundReads == 0 && probe.Writes == 0 : !blocked && probe.SoundReads > 0,
+                    "Exact legacy combination never receives modern sound commands; same firmware on Gen2 is probed");
+                probe.Firmware = "FFFFFFFF"; client.Connect();
+                Check(client.Compatibility.SoundMethod == ReaderSoundMethod.ProbeRequired, "Reconnect discards previous sound capabilities even for unknown firmware");
+                client.TestTransport = delegate(string command) { if (command == Codec.GetMibCommand(ReaderClient.SoundOid)) throw new IOException("Temporary transport failure"); return probe.Send(command); };
+                bool temporary = false; try { client.ReadReaderSound(); } catch (IOException) { temporary = true; }
+                Check(temporary && client.Compatibility.SoundMethod == ReaderSoundMethod.ProbeRequired, "Transport failure does not become unsupported capability");
+                client.TestTransport = probe.Send;
+                probe.MissingSound = true; int reads = probe.SoundReads, writes = probe.Writes;
+                blocked = false; try { client.ReadReaderSound(); } catch (NotSupportedException) { blocked = true; }
+                Check(blocked && probe.SoundReads == reads + 1 && client.Compatibility.SoundMethod == ReaderSoundMethod.Unavailable && probe.Writes == writes,
+                    "Missing MIB becomes unavailable without reader writes");
+                try { client.ReadReaderSound(); } catch (NotSupportedException) { }
+                Check(probe.SoundReads == reads + 1, "Missing capability is not repeatedly probed during a connection");
+                probe.MissingSound = false; client.Connect();
+                probe.SoundTable = new byte[129]; Reject(delegate { client.ReadReaderSound(); }, "Unknown sound schema never becomes verified");
+                Check(client.Compatibility.SoundMethod == ReaderSoundMethod.ProbeRequired && probe.Writes == writes, "Bad response is not cached as supported");
+            }
             foreach (byte board in new byte[] { 6, 10 })
             {
                 string local = Path.Combine(directory, board.ToString()); Directory.CreateDirectory(local);
@@ -749,6 +774,7 @@
         private sealed class FakeReader
         {
             internal byte Board = 6; internal int Writes; internal bool BadSettings; internal bool BadUsbMode; internal bool WideUsbMode;
+            internal string Firmware = "01050176"; internal bool MissingSound; internal int SoundReads;
             internal int SoundFailure = -1;
             internal byte[] SoundTable = Enumerable.Range(0, 130).Select(i => (byte)(i < 39 ? 0 : 165)).ToArray();
             private bool present;
@@ -782,10 +808,10 @@
                 string key = Codec.ToHex(oid.Value);
                 if (cmd[5] == 2) { Writes++; settings[key] = value; }
                 else if (key == "010200") value = new Tlv { Tag = 2, Value = new byte[] { Board } };
-                else if (key == "010100") value = new Tlv { Tag = 2, Value = Codec.Hex("01050176") };
+                else if (key == "010100") value = new Tlv { Tag = 2, Value = Codec.Hex(Firmware) };
                 else if (key == "010A00") value = new Tlv { Tag = 4, Value = Enumerable.Repeat((byte)0xAA, 16).ToArray() };
                 else if (key == "04010500") value = new Tlv { Tag = 2, Value = BadUsbMode ? new byte[] { 1 } : WideUsbMode ? new byte[] { 0, 255 } : new byte[] { 255 } };
-                else if (key == ReaderClient.SoundOid) value = new Tlv { Tag = 4, Value = SoundTable };
+                else if (key == ReaderClient.SoundOid) { SoundReads++; if (MissingSound) return Codec.Hex("0302009000"); value = new Tlv { Tag = 4, Value = SoundTable }; }
                 else if (key == "0302010300") value = new Tlv { Tag = 4, Value = present ? Codec.Hex("3B00") : new byte[0] };
                 else value = BadSettings ? new Tlv { Tag = 4, Value = new byte[0] } : settings[key];
                 return Codec.Hex("0300000D" + oid.Value.Length.ToString("X2") + key + value.Tag.ToString("X2") + (value.Value.Length >= 128 ? "81" : "") + value.Value.Length.ToString("X2") + Codec.ToHex(value.Value) + "9000");
