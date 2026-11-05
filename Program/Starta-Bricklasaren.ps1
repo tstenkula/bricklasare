@@ -1,6 +1,6 @@
 ﻿#requires -Version 5.1
 [CmdletBinding()]
-param([switch]$SelfTestOnly)
+param([switch]$SelfTestOnly, [switch]$ConnectionReport)
 
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
@@ -43,6 +43,15 @@ try {
     # and run in the PowerShell process. No application EXE/output assembly is
     # requested, copied, or launched. No execution policy is changed here.
     Add-Type -TypeDefinition $source -ReferencedAssemblies $references -Language CSharp
+    if ($ConnectionReport) {
+        if ($SelfTestOnly) { throw 'Välj antingen anslutningskontroll eller självtest.' }
+        $report = [Tobtech.OmnikeyRco.ReceptionFiles]::ConnectionReport($root)
+        $reportPath = Join-Path ([Tobtech.OmnikeyRco.ReceptionFiles]::DataPath) 'anslutningskontroll.txt'
+        [Tobtech.OmnikeyRco.ReceptionFiles]::WriteAtomic($reportPath, $report)
+        Write-Host $report
+        Write-Host ('Rapporten är sparad: ' + $reportPath)
+        exit 0
+    }
     $result = [Tobtech.OmnikeyRco.Entry]::Run($root, $SelfTestOnly.IsPresent)
     if ($SelfTestOnly -and $result -eq 0) {
         $report = Join-Path ([Tobtech.OmnikeyRco.ReceptionFiles]::DataPath) 'sjalvtest-reception.txt'

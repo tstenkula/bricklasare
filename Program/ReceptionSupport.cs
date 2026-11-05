@@ -9,6 +9,102 @@ namespace Tobtech.OmnikeyRco
     using System.Text.RegularExpressions;
     using System.Web.Script.Serialization;
 
+    public enum ConnectionPhase { None, IdentifyReader, ProtectUsbOutput, ImportLocalProfile, ReadSoundState, SavePreferences }
+
+    // Only fixed codes and known source method names enter a shared report. No raw
+    // exception messages, stack traces, file paths, HTTP headers or APDU bytes.
+    internal static class ReaderDiagnostics
+    {
+        internal static string Inspect(ReaderClient reader)
+        {
+            StringBuilder report = new StringBuilder("BRICKLÄSAREN – ANSLUTNINGSKONTROLL 1\r\n");
+            report.Append("Tid: ").Append(DateTime.Now.ToString("s")).Append("\r\n");
+            report.Append("Kontrollen läser inställningar. Den ändrar inte läsaren.\r\n");
+            report.Append("Inga bricknummer, läsar-ID, råsvar eller sökvägar ingår.\r\n\r\n");
+            try { reader.Connect(); report.Append("IdentifyReader: OK\r\n"); }
+            catch (Exception error) { report.Append("IdentifyReader: ").Append(ReceptionFiles.SafeError(error)).Append("\r\n"); return report.ToString(); }
+            try
+            {
+                bool mode = ReaderSafety.IsCustomReport(reader);
+                report.Append("UsbOutputMode: ").Append(mode ? "Custom Report" : "Tangentbordsläge").Append("\r\n");
+            }
+            catch (Exception error) { report.Append("UsbOutputMode: ").Append(ReceptionFiles.SafeError(error)).Append("\r\n"); }
+            try { report.Append(ReaderSafety.InspectSavedState(reader)).Append("\r\n"); }
+            catch (Exception error) { report.Append("SavedUsbState: ").Append(ReceptionFiles.SafeError(error)).Append("\r\n"); }
+            report.Append("ScanRecovery: ").Append(reader.HasPendingRecovery ? "Väntar" : "Ingen").Append("\r\n");
+            report.Append("LocalProfile: ").Append(reader.CalibrationIssue != null ? "Behöver kontrolleras" : reader.Cal != null ? "Godkänd" : "Standardformat").Append("\r\n");
+            return report.ToString();
+        }
+        internal static string Code(Exception error)
+        {
+            if (error is ReaderMibException) return "MIB_REJECTED";
+            switch (error.Message)
+            {
+                case "Läsaren rapporterar ett okänt USB-läge. Förberedelsen kan inte godkännas.": return "USB_MODE_RESPONSE";
+                case "Läsarens identitet eller firmware kunde inte verifieras. Åtgärden avbröts.": return "USB_IDENTITY_RESPONSE";
+                case "En annan läsare är ansluten. USB-ändringen avbröts för att skydda dess inställningar.": return "USB_IDENTITY_CHANGED";
+                case "Läsarens firmware har ändrats. USB-ändringen avbröts; kontakta IT.": return "USB_FIRMWARE_CHANGED";
+                case "USB-originalinställningen är ogiltig eller gäller en annan läsare eller firmware. Kontakta IT.": return "USB_BACKUP_INVALID";
+                case "Originalinställningen för USB-läget saknas. Kontakta IT; ingen inställning ändras.": return "USB_BACKUP_MISSING";
+                case "Den avbrutna USB-förberedelsen kunde inte verifieras. Behåll konfigurationsfilerna och kontakta IT.": return "USB_PENDING_INVALID";
+                case "USB-konfigurationsfilen är för stor.": return "USB_STATE_SIZE";
+                case "USB-konfigurationsfilen kunde inte läsas.": return "USB_STATE_JSON";
+                case "För stort HTTP-huvud från läsaren.": return "HTTP_HEADER_SIZE";
+                case "Avklippt HTTP-svar från läsaren.": return "HTTP_LINE_TRUNCATED";
+                case "Ogiltigt HTTP-svar från läsaren.": return "HTTP_LINE_FORMAT";
+                case "Läsaren svarade inte OK.": return "HTTP_STATUS";
+                case "Ogiltigt HTTP-huvud.": return "HTTP_HEADER_FORMAT";
+                case "Dubbelt HTTP-huvud.": return "HTTP_HEADER_DUPLICATE";
+                case "Oväntad HTTP-kodning från läsaren.": return "HTTP_ENCODING";
+                case "För stort eller ogiltigt läsarsvar.": return "HTTP_CHUNK_SIZE";
+                case "Ogiltigt HTTP-slut från läsaren.": return "HTTP_TRAILER";
+                case "Avklippt HTTP-del från läsaren.": return "HTTP_CHUNK_TRUNCATED";
+                case "För stort läsarsvar.": return "HTTP_BODY_SIZE";
+                case "Avklippt läsarsvar.": return "HTTP_BODY_TRUNCATED";
+                case "Ogiltig textkodning i läsarsvaret.": return "HTTP_TEXT_ENCODING";
+                default: return null;
+            }
+        }
+        internal static string Source(Exception error)
+        {
+            List<string> result = new List<string>();
+            System.Diagnostics.StackFrame[] frames = new System.Diagnostics.StackTrace(error, false).GetFrames();
+            if (frames == null) return "";
+            foreach (System.Diagnostics.StackFrame frame in frames)
+            {
+                System.Reflection.MethodBase method = frame.GetMethod();
+                if (method == null) continue;
+                Type owner = method.DeclaringType;
+                if (owner != typeof(ReaderSafety) && owner != typeof(ReaderNetwork) && owner != typeof(ReaderClient) &&
+                    owner != typeof(Codec) && owner != typeof(ReceptionFiles)) continue;
+                // Ignore generated closure names. This is an identifier from the
+                // shipped program, never a path, argument value or exception text.
+                if (!Regex.IsMatch(method.Name, @"\A[A-Za-z][A-Za-z0-9_]{0,63}\z")) continue;
+                string entry = owner.Name + "." + method.Name;
+                if (!result.Contains(entry)) result.Add(entry);
+                if (result.Count == 4) break;
+            }
+            return String.Join(" > ", result.ToArray());
+        }
+        internal static string MibName(string oid)
+        {
+            switch (oid)
+            {
+                case "010200": return "Board";
+                case "010100": return "Firmware";
+                case "010A00": return "ReaderIdentity";
+                case "04010500": return "UsbOutputMode";
+                case "0302010300": return "CardPresence";
+                case "040C0200": return "AskDataSelection";
+                case "02020104010100": return "IndicatorSequences";
+                case "02020301030100": case "02020301040100": case "02020301050100":
+                case "02020301060100": case "02020301070100": case "02020301070400":
+                case "020203010A0100": return "Polling";
+                default: return "Other";
+            }
+        }
+    }
+
     public sealed class ReceptionConfig
     {
         public string Address { get; set; }
@@ -40,6 +136,7 @@ namespace Tobtech.OmnikeyRco
                     "Program/ReceptionSupport.cs", "Program/ReaderSafety.cs", "Program/ReceptionApp.cs",
                     "START-HAR.txt", "Snabbstart.txt",
                     "IT/LAS-MIG.txt", "IT/Ljud.md", "IT/Starta-med-felsokning.cmd",
+                    "IT/Kontrollera-anslutning.cmd", "IT/Anslutningsdiagnostik.md",
                     "IT/Forsta-start.md", "IT/Utseende.md", "IT/Kor-sjalvtester.cmd", "IT/Verifiering.txt", "IT/Referensbricka.md",
                     "Drivrutiner/LAS-MIG.txt", "LICENSE.txt", "CONTRIBUTING.md",
                     "Program/Workflow.cs", "Program/Updates.cs", "Program/Install-Update.ps1",
@@ -182,6 +279,12 @@ namespace Tobtech.OmnikeyRco
         // The bounded in-memory transport log also excludes raw TX/RX data.
         private static readonly object errorGate = new object();
         private static readonly List<string> errorSummaries = new List<string>();
+        public static string ConnectionReport(string packagePath)
+        {
+            PackagePath = Path.GetFullPath(packagePath);
+            LocalLog log = new LocalLog();
+            return ReaderDiagnostics.Inspect(new ReaderClient(LoadAddress(log), DataPath, log));
+        }
         public static string SafeError(Exception error)
         {
             if (error == null) return "Ingen felinformation.";
@@ -192,6 +295,12 @@ namespace Tobtech.OmnikeyRco
                 if (depth > 0) text.Append(" -> ");
                 text.Append(current.GetType().FullName).Append(" [HRESULT 0x")
                     .Append(current.HResult.ToString("X8")).Append("]");
+                string code = ReaderDiagnostics.Code(current), source = ReaderDiagnostics.Source(current);
+                if (code != null) text.Append(" [orsak ").Append(code).Append("]");
+                if (source.Length != 0) text.Append(" [steg ").Append(source).Append("]");
+                ReaderMibException mib = current as ReaderMibException;
+                if (mib != null) text.Append(" [kommando ").Append(mib.Command).Append("; MIB-status ")
+                    .Append(mib.Status).Append("; index ").Append(mib.Index).Append("]");
                 ReaderStatusException status = current as ReaderStatusException;
                 if (status != null) text.Append(" [läsarstatus ").Append(status.StatusWord.ToString("X4")).Append("]");
                 System.Net.WebException network = current as System.Net.WebException;
@@ -199,11 +308,13 @@ namespace Tobtech.OmnikeyRco
             }
             return text.ToString();
         }
-        public static void RecordFailure(Exception error)
+        public static void RecordFailure(Exception error, ConnectionPhase phase = ConnectionPhase.None)
         {
             lock (errorGate)
             {
-                errorSummaries.Add(DateTime.Now.ToString("s") + " " + SafeError(error));
+                string context = phase != ConnectionPhase.None && Enum.IsDefined(typeof(ConnectionPhase), phase)
+                    ? " [anslutningsfas " + phase.ToString() + "]" : "";
+                errorSummaries.Add(DateTime.Now.ToString("s") + context + " " + SafeError(error));
                 if (errorSummaries.Count > 100) errorSummaries.RemoveAt(0);
             }
         }
@@ -214,7 +325,8 @@ namespace Tobtech.OmnikeyRco
                 return "BRICKLÄSAREN RECEPTION 3.6.2 – POWERSHELL\r\n" +
                     "Läsarmotor: v3.6.2, standardformat med frivillig lokal IT-kalibrering.\r\n" +
                     "Rapport skapad: " + DateTime.Now.ToString("s") + "\r\n" +
-                    "Inga skannade nummer, råsvar eller undantagsmeddelanden ingår.\r\n\r\n" +
+                    "Diagnostik: anslutning 1.\r\n" +
+                    "Inga skannade nummer, råsvar, sökvägar eller undantagsmeddelanden ingår.\r\n\r\n" +
                     (errorSummaries.Count == 0 ? "Inga fel registrerade under denna programkörning." : String.Join("\r\n", errorSummaries.ToArray()));
             }
         }
@@ -498,6 +610,30 @@ namespace Tobtech.OmnikeyRco
             check(!safe.Contains("025800772"));
             check(!safe.Contains("051501029"));
             check(!safe.Contains("12345678"));
+            check(ReaderDiagnostics.Code(new InvalidDataException(privateMessage)) == null);
+            check(ReaderDiagnostics.Code(new InvalidDataException("Dubbelt HTTP-huvud.")) == "HTTP_HEADER_DUPLICATE");
+            check(ReaderDiagnostics.Code(new InvalidDataException("Dubbelt HTTP-huvud." + privateMessage)) == null);
+            check(ReceptionFiles.SafeError(new InvalidDataException("Dubbelt HTTP-huvud.")).Contains("HTTP_HEADER_DUPLICATE"));
+            check(!ReceptionFiles.SafeError(new InvalidDataException("Dubbelt HTTP-huvud." + privateMessage)).Contains("HTTP_HEADER_DUPLICATE"));
+            check(ReaderDiagnostics.Code(new InvalidDataException("USB-originalinställningen är ogiltig eller gäller en annan läsare eller firmware. Kontakta IT.")) == "USB_BACKUP_INVALID");
+            check(ReaderDiagnostics.Code(new InvalidDataException("Läsaren rapporterar ett okänt USB-läge. Förberedelsen kan inte godkännas.")) == "USB_MODE_RESPONSE");
+            bool mibRejected = false;
+            try { Codec.MibResponse("04010500", Codec.Hex("0302010D040401050005009000")); }
+            catch (ReaderMibException rejected)
+            {
+                mibRejected = true;
+                string summary = ReceptionFiles.SafeError(rejected);
+                check(summary.Contains("MIB_REJECTED") && summary.Contains("UsbOutputMode") && summary.Contains("Codec.MibResponse"));
+                check(summary.Contains("MIB-status 2") && summary.Contains("index 1"));
+                check(!summary.Contains("04010500") && !summary.Contains("0302010D"));
+                check(!summary.Contains(Path.GetTempPath()));
+            }
+            check(mibRejected);
+            string unknown = ReceptionFiles.SafeError(new ReaderMibException(privateMessage, 2, 1));
+            check(unknown.Contains("Other") && !unknown.Contains("01020304"));
+            check(ReceptionFiles.SafeError(new IOException(privateMessage, new ReaderMibException("04010500", 2, 1))).Contains("UsbOutputMode"));
+            string chain = ReceptionFiles.SafeError(new IOException(privateMessage, new InvalidDataException("Dubbelt HTTP-huvud.")));
+            check(chain.Contains("HTTP_HEADER_DUPLICATE") && !chain.Contains("Råvärde"));
             check(ReceptionFiles.SafeError(null) == "Ingen felinformation.");
             check(ReceptionFiles.SafeError(new ReaderStatusException(0x6985)).Contains("6985"));
             return n;
