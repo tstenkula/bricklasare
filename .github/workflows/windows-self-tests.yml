@@ -57,6 +57,14 @@ jobs:
         shell: powershell
         run: tools/test-startup.ps1
 
+      - name: Test read-only legacy reader inspection without hardware
+        shell: powershell
+        run: tools/test-reader-ui-inspection.ps1
+
+      - name: Build separate read-only inspection package
+        shell: powershell
+        run: tools/build-reader-ui-inspection.ps1
+
       - name: Parse installation and packaging scripts
         shell: powershell
         run: |
@@ -75,4 +83,12 @@ jobs:
             ${{ runner.temp }}\bricklasare-ui
             dist/Bricklasaren-3.6.4-Windows.zip
           if-no-files-found: ignore
+          retention-days: 3
+
+      - name: Save separate read-only reader inspection tool
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: gen1-sound-inspection
+          path: dist/Bricklasaren-Gen1-ljudunderlag-1-Windows.zip
+          if-no-files-found: error
           retention-days: 3

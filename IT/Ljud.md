@@ -23,3 +23,13 @@ Knapparna använder Lucides färdiga **Volume 2** och **Volume Off**, med samma 
 Vid första anslutning och återanslutning försöker appen läsa läsarens faktiska ljudläge. Om det inte går visas en neutral väntesymbol i stället för ett gissat på/av-läge, och orsaken sparas i felrapporten. Appens egen ljudinställning fungerar fortfarande separat.
 
 På en verklig läsare med huvudfirmware **04.02.0100** har kommandot för ljudtabellen svarat `noSuchName` (MIB-status 2). Den läsarens webbgränssnitt visar det äldre upplägget USB Ready, Card Access, No USB och Keyboard Wedge. Den nuvarande ljudtabellsmetoden är därför inte verifierad eller tillgänglig där. Appen ändrar inte sekvenser när de inte kan läsas och säkerhetskopieras. Nyare kompatibla tabeller provas med simulerade svar; fysisk av/på-verifiering återstår.
+
+## Gen1: underlag för kompatibilitetsarbetet
+
+Artikelnummer R54270001 hör till Gen1. Den rapporterade revision E med firmware 04.02.0100 har det äldre webbgränssnittet med fyra händelser. Att ljudtabellens MIB saknas betyder inte att läsaren saknar ljudinställningar. Den exakta säkra läs-/skrivvägen för den varianten återstår att verifiera; inga gissade Gen1-kommandon har införts.
+
+Det separata Windows-verktyget i `tools/reader-ui-inspection/` hämtar startsidan och uttryckligen angivna script-/frame-/iframe-resurser från läsarens USB-webbgränssnitt. Det kör inte hämtad kod, skickar inga APDU-kommandon och följer inga formulär eller operationslänkar. Andra filreferenser listas enbart för manuell granskning. Skript sparas som textfiler under användarens lokala datamapp; de kan innehålla lokala uppgifter och ska granskas före delning. Ingen automatisk uppladdning sker. Verktyget kan köras när fysisk läsare åter finns tillgänglig; lyckad insamling är inte ett godkänt prov av ljudstyrning.
+
+För utvecklare: `tools/test-reader-ui-inspection.ps1` kör helt frikopplade tester. `tools/build-reader-ui-inspection.ps1` bygger det separata paketet från en explicit fillista. Verktyget ingår inte i appens vanliga paket eller startflöde. Mac-appen använder CCID; Windows-verktyget ger inte i sig verifierat Mac-stöd för Gen1-ljud.
+
+Vid återställning av en avbruten ljudändring jämför appen dessutom aktuella LED-värden, tider och repetitionsantal med den sparade återställningsposten. Om de har ändrats externt stoppas återställningen utan skrivning och posten behålls, så att senare ljusinställningar inte skrivs över.

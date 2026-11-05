@@ -98,7 +98,18 @@
             byte[] table = ReadSoundTable();
             if (backup != null && !String.IsNullOrEmpty(backup.Pending))
             {
-                Array.Copy(Codec.Hex(backup.Pending), table, 39); WriteSoundTable(table);
+                byte[] target = (byte[])table.Clone();
+                Array.Copy(Codec.Hex(backup.Pending), target, 39); ValidateSound(target);
+                // Recovery may restore buzzer bits only. Never replay stale LEDs, durations
+                // or repeat counts over a sequence changed outside the app after the crash.
+                for (int i = 0; i < 39; i++)
+                {
+                    bool state = i % 13 < 12 && (i % 13) % 2 == 0;
+                    int mask = state ? 0xEF : 0xFF;
+                    if ((table[i] & mask) != (target[i] & mask))
+                        throw new InvalidOperationException("Läsarens ljus- eller ljudsekvens har ändrats utanför appen. Kontrollera inställningarna innan ljudet återställs.");
+                }
+                WriteSoundTable(target); table = target;
                 backup.Pending = null; AtomicWrite(SoundPath, json.Serialize(backup));
             }
             return HasSound(table);
