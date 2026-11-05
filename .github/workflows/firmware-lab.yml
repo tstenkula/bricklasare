@@ -1,0 +1,36 @@
+name: Firmware lab safety tests
+
+on:
+  pull_request:
+    paths:
+      - Firmware/**
+      - .github/workflows/firmware-lab.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  windows-lab:
+    runs-on: windows-2025
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Test simulated C# 5 firmware flow without hardware
+        shell: powershell
+        run: Firmware/Lab/test-windows.ps1
+  mac-lab:
+    runs-on: macos-15
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Test simulated native Swift firmware flow without hardware
+        run: bash Firmware/Lab/test-mac.sh
