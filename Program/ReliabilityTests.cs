@@ -647,7 +647,8 @@
                 {
                     byte[] changed = (byte[])muted.Clone(); changed[changedIndex] ^= 1; fake.SoundTable = (byte[])changed.Clone();
                     string saved = soundJson.Serialize(pendingSound); File.WriteAllText(soundPath, saved); writes = fake.Writes;
-                    Reject(delegate { reader.ReadReaderSound(); }, "Pending sound recovery rejects changed LEDs, durations and repeat counts");
+                    failed = false; try { reader.ReadReaderSound(); } catch (InvalidOperationException) { failed = true; }
+                    Check(failed, "Pending sound recovery rejects changed LEDs, durations and repeat counts");
                     Check(fake.Writes == writes && fake.SoundTable.SequenceEqual(changed) && File.ReadAllText(soundPath) == saved,
                         "Rejected sound recovery preserves live sequences and the pending journal without writes");
                 }
