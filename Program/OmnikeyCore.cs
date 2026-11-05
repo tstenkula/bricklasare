@@ -93,7 +93,7 @@ namespace Tobtech.OmnikeyRco
         {
             byte[] p = Success(response);
             if (p.Length < 7 || p[0] != 3) throw new FormatException("Oväntat MIB-svar.");
-            if (p[1] != 0) throw new InvalidOperationException("MIB-fel " + p[1] + " för " + oid + " (index " + p[2] + "). Ingen gissad inställning används.");
+            if (p[1] != 0) throw new ReaderMibException(oid, p[1], p[2]);
             int i = 3; Tlv name = ReadTlv(p, ref i); Tlv value = ReadTlv(p, ref i);
             if (name.Tag != 0x0D || ToHex(name.Value) != oid.ToUpperInvariant() || i != p.Length)
                 throw new FormatException("MIB-svaret motsvarar inte den begärda inställningen.");
@@ -146,6 +146,17 @@ namespace Tobtech.OmnikeyRco
         }
     }
     public sealed class Tlv { public byte Tag; public byte[] Value; }
+    public sealed class ReaderMibException : InvalidOperationException
+    {
+        public byte Status { get; private set; }
+        public byte Index { get; private set; }
+        public string Command { get; private set; }
+        public ReaderMibException(string oid, byte status, byte index)
+            : base("Läsaren avvisade ett inställningskommando. Spara en felrapport via Hjälp.")
+        {
+            Command = ReaderDiagnostics.MibName(oid); Status = status; Index = index;
+        }
+    }
     public sealed class ReaderStatusException : Exception
     {
         public int StatusWord { get; private set; }

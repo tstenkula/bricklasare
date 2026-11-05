@@ -37,11 +37,17 @@ namespace Tobtech.OmnikeyRco
         private static readonly object Gate = new object();
         private static readonly Dictionary<string, string[]> LegacyIdentities = new Dictionary<string, string[]>();
 
+        // Preserve this validation boundary in privacy-safe diagnostic method names.
+        [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
         private static bool DecodeMode(Tlv state)
         {
             if (state == null || state.Tag != 2 || state.Value == null || state.Value.Length != 1 ||
                 (state.Value[0] != 0 && state.Value[0] != 255))
-                throw new InvalidDataException("Läsaren rapporterar ett okänt USB-läge. Förberedelsen kan inte godkännas.");
+            {
+                InvalidDataException error = new InvalidDataException("Läsaren rapporterar ett okänt USB-läge. Förberedelsen kan inte godkännas.");
+                error.Data["Tobtech.UsbModeShape"] = new UsbModeShape(state);
+                throw error;
+            }
             return state.Value[0] == 255;
         }
 
@@ -272,6 +278,22 @@ namespace Tobtech.OmnikeyRco
                 Thread.Sleep(500);
             }
             throw new IOException("Läsarens USB-omstart kunde inte verifieras. Anslut samma läsare igen och välj Försök igen. Förberedelsen är sparad och kan fortsätta.", last);
+        }
+
+        // Diagnostic preflight only: no lock file, backup creation, SET, Apply,
+        // reboot or recovery. Use the same strict saved-state validators as EnsureMode.
+        internal static string InspectSavedState(ReaderClient reader)
+        {
+            RequireReader(reader);
+            string backupPath = Path.Combine(reader.DirectoryPath, "usb-original-" + reader.ReaderId + ".json");
+            string pendingPath = Path.Combine(reader.DirectoryPath, "usb-pending-" + reader.ReaderId + ".json");
+            ReaderOutputTransition pending = ReadPending(pendingPath, reader.ReaderId, reader.Firmware);
+            bool backup = File.Exists(backupPath);
+            if (backup) ReadBackup(backupPath, reader.ReaderId, reader.Firmware);
+            else if (pending != null)
+                throw new InvalidDataException("Originalinställningen för USB-läget saknas. Kontakta IT; ingen inställning ändras.");
+            return "UsbOriginal: " + (backup ? "Godkänd" : "Saknas; ingen sparad förberedelse") +
+                "\r\nUsbPending: " + (pending == null ? "Ingen" : pending.Phase == "prepared" ? "Förberedd" : "Tillämpad; omstart väntar");
         }
 
         private static ReaderOutputBackup ReadBackup(string path, string id, string firmware)

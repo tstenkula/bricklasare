@@ -582,6 +582,7 @@ namespace Tobtech.OmnikeyRco
             ClearResults(); reader = null; readerSound = null; outputProtected = false; SetBusy(true); connection.Text = "Ansluter läsaren …";
             SetInstruction("ANSLUTER", "Kontrollerar läsaren", "Låt USB-kabeln sitta i. Du behöver inte lägga på någon bricka ännu.", false);
             ReaderClient candidate = null;
+            ConnectionPhase phase = ConnectionPhase.IdentifyReader;
             try
             {
                 candidate = new ReaderClient(address, ReceptionFiles.DataPath, log);
@@ -589,6 +590,7 @@ namespace Tobtech.OmnikeyRco
                 reader = candidate;
                 if (!candidate.HasPendingRecovery)
                 {
+                    phase = ConnectionPhase.ProtectUsbOutput;
                     candidate = await Task.Run(delegate { return ReaderSafety.EnsureProtected(candidate, address, ReceptionFiles.DataPath, log, PreparationProgress); });
                     reader = candidate; outputProtected = true;
                 }
@@ -603,18 +605,19 @@ namespace Tobtech.OmnikeyRco
                     catch (Exception profileError)
                     {
                         // A wrong profile must not disguise an otherwise working reader connection.
-                        SaveError(profileError);
+                        SaveError(profileError, ConnectionPhase.ImportLocalProfile);
                         notice.Text = "Läsarprofilen kunde inte användas. Be IT kontrollera den via Hjälp.";
                     }
                 }
                 if (outputProtected && !reader.HasPendingRecovery) { try { readerSound = await Task.Run(delegate { return candidate.ReadReaderSound(); }); } catch { readerSound = null; } }
+                phase = ConnectionPhase.SavePreferences;
                 ReceptionFiles.SaveAddress(address); ReadyMessage();
             }
             catch (Exception ex)
             {
                 outputProtected = false;
                 reader = candidate != null && !String.IsNullOrEmpty(candidate.ReaderId) ? candidate : null;
-                SaveError(ex);
+                SaveError(ex, phase);
                 if (reader == null)
                 {
                     connection.Text = "Ingen läsare är ansluten";
@@ -623,7 +626,7 @@ namespace Tobtech.OmnikeyRco
                 else
                 {
                     connection.Text = "Läsaren kunde inte förberedas";
-                    SetInstruction("FÖRBEREDELSEN ÄR INTE KLAR", "Låt läsaren vara inkopplad", "Välj Hjälp och Försök ansluta igen. Inga brickor kan skannas innan förberedelsen är klar.", true);
+                    SetInstruction("FÖRBEREDELSEN ÄR INTE KLAR", "Låt läsaren vara inkopplad", "Spara en felrapport via Hjälp och kontakta IT. Rapporten visar var förberedelsen stoppades. Inga brickor kan skannas ännu.", true);
                 }
             }
             finally { SetBusy(false); }
@@ -766,9 +769,9 @@ namespace Tobtech.OmnikeyRco
             try { Clipboard.SetText(text); lastCopied = text; notice.Text = message + " Klistra in med Ctrl+V."; }
             catch (Exception ex) { SaveError(ex); notice.Text = "Det gick inte att kopiera just nu. Prova knappen igen."; }
         }
-        private void SaveError(Exception ex)
+        private void SaveError(Exception ex, ConnectionPhase phase = ConnectionPhase.None)
         {
-            ReceptionFiles.RecordFailure(ex);
+            ReceptionFiles.RecordFailure(ex, phase);
             try { ReceptionFiles.WriteAtomic(Path.Combine(ReceptionFiles.DataPath, "senaste-fel-reception.txt"), ReceptionFiles.Report()); } catch { }
         }
         private async Task SaveReport()

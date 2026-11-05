@@ -33,6 +33,7 @@
             {
                 Application.EnableVisualStyles(); Application.SetCompatibleTextRenderingDefault(false);
                 count += ReaderNetworkTests.Run();
+                ExerciseConnectionDiagnostics(Path.Combine(directory, "connection-diagnostics"));
                 ExerciseReaderSound(Path.Combine(directory, "reader-sound"));
                 ExerciseUpdates(directory);
                 ExerciseFirstStart(Path.Combine(directory, "first-start"));
@@ -598,9 +599,50 @@
                 }
             }
         }
+        private static void ExerciseConnectionDiagnostics(string directory)
+        {
+            FakeReader fake = new FakeReader();
+            ReaderClient reader = new ReaderClient("192.168.63.99", directory, new LocalLog());
+            int commands = 0;
+            reader.TestTransport = delegate(string command) {
+                // A diagnostic run must send GET MIB only. Reject all card reads,
+                // SETs, Apply, reboot and automatic sound-recovery commands.
+                byte[] bytes = Codec.Hex(command);
+                Check(bytes.Length > 8 && bytes[0] == 255 && bytes[1] == 104 && bytes[2] == 0 && bytes[3] == 0 && bytes[5] == 0,
+                    "Connection diagnostic sends GET MIB only");
+                commands++; return fake.Send(command);
+            };
+            string report = ReaderDiagnostics.Inspect(reader);
+            Check(report.Contains("IdentifyReader: OK") && report.Contains("UsbOutputMode: Custom Report"), "Read-only diagnostic identifies reader and USB mode");
+            Check(commands > 10 && fake.Writes == 0 && Directory.GetFiles(directory).Length == 0, "Diagnostic creates no reader state and performs no writes");
+            Check(!report.Contains(reader.ReaderId) && !report.Contains(reader.Firmware) && !report.Contains(directory) && !report.Contains("192.168.63.99"), "Diagnostic excludes device identity, address and paths");
+            string backupPath = Path.Combine(directory, "usb-original-" + reader.ReaderId + ".json");
+            byte[] damaged = System.Text.Encoding.UTF8.GetBytes("{}"); File.WriteAllBytes(backupPath, damaged);
+            report = ReaderDiagnostics.Inspect(reader);
+            Check(report.Contains("USB_BACKUP_INVALID") && report.Contains("ReaderSafety.ReadBackup"), "Legacy or invalid USB backup has a distinct diagnostic code");
+            Check(File.ReadAllBytes(backupPath).SequenceEqual(damaged) && Directory.GetFiles(directory).Length == 1, "Diagnostic preserves invalid state for investigation");
+            File.Delete(backupPath);
+            string pendingPath = Path.Combine(directory, "usb-pending-" + reader.ReaderId + ".json");
+            var json = new System.Web.Script.Serialization.JavaScriptSerializer();
+            ReaderOutputTransition pending = new ReaderOutputTransition { Schema = 1, ReaderId = reader.ReaderId, Firmware = reader.Firmware,
+                TargetCustomReport = true, Phase = "prepared", CreatedUtc = DateTime.UtcNow.ToString("o") };
+            File.WriteAllText(pendingPath, json.Serialize(pending)); string pendingBefore = File.ReadAllText(pendingPath);
+            report = ReaderDiagnostics.Inspect(reader);
+            Check(report.Contains("USB_BACKUP_MISSING") && File.ReadAllText(pendingPath) == pendingBefore, "Interrupted operation without original is reported without creating a guessed backup");
+            pending.Firmware = "00000000"; File.WriteAllText(pendingPath, json.Serialize(pending));
+            report = ReaderDiagnostics.Inspect(reader);
+            Check(report.Contains("USB_PENDING_INVALID") && fake.Writes == 0, "Mismatched pending state is identified without recovery writes");
+            File.Delete(pendingPath);
+            fake.BadUsbMode = true; report = ReaderDiagnostics.Inspect(reader);
+            Check(report.Contains("USB_MODE_RESPONSE"), "Invalid mode has a fixed reason code: " + report);
+            Check(report.Contains("USB-format Integer; längd 1; värde 01"), "Invalid mode includes bounded shape metadata: " + report);
+            Check(report.Contains("ReaderSafety.DecodeMode"), "Invalid mode retains the safe validation boundary: " + report);
+            Check(report.Contains("UsbOriginal:"), "Invalid mode does not stop independent local-state checks: " + report);
+            Check(fake.Writes == 0 && Directory.GetFiles(directory).Length == 0, "All diagnostic error paths remain read only");
+        }
         private sealed class FakeReader
         {
-            internal byte Board = 6; internal int Writes; internal bool BadSettings;
+            internal byte Board = 6; internal int Writes; internal bool BadSettings; internal bool BadUsbMode;
             internal int SoundFailure = -1;
             internal byte[] SoundTable = Enumerable.Range(0, 130).Select(i => (byte)(i < 39 ? 0 : 165)).ToArray();
             private bool present;
@@ -636,6 +678,7 @@
                 else if (key == "010200") value = new Tlv { Tag = 2, Value = new byte[] { Board } };
                 else if (key == "010100") value = new Tlv { Tag = 2, Value = Codec.Hex("01050176") };
                 else if (key == "010A00") value = new Tlv { Tag = 4, Value = Enumerable.Repeat((byte)0xAA, 16).ToArray() };
+                else if (key == "04010500") value = new Tlv { Tag = 2, Value = new byte[] { BadUsbMode ? (byte)1 : (byte)255 } };
                 else if (key == ReaderClient.SoundOid) value = new Tlv { Tag = 4, Value = SoundTable };
                 else if (key == "0302010300") value = new Tlv { Tag = 4, Value = present ? Codec.Hex("3B00") : new byte[0] };
                 else value = BadSettings ? new Tlv { Tag = 4, Value = new byte[0] } : settings[key];
