@@ -30,6 +30,7 @@ REPO = 'tstenkula/bricklasare'
 FEED_COMMIT = '136898a6df968a3e0a99b6333dbe8983e4d464c3'
 FEED_SHA256 = 'cc104420dc4e9ffdbd2ca2a7d9f5563beb4efda4616c9c2fab899e355b4313d3'
 RELEASE_PINS = {
+    '3.6.2': (2_269_615, 'e82391b6a5742d38f13e8e29bbc4e99c0d279844d8422c59ad521b68d90769e2'),
     '3.6.1': (2_237_291, 'f1831ad006487c5af3026bd96c6052ce6933cd8ca48f84c3d112b5afb4746278'),
     '3.5.2': (2_186_584, '7714bbc5bc869a2835aa3ee6ce719077da6b3fbcdf0e7fc15be7b7611bfd3e6f'),
     '3.6.0': (2_219_538, '328580e26dde16e2085c1f2a42bdc4388167f409754845e914935ba40472afd2'),
@@ -37,6 +38,10 @@ RELEASE_PINS = {
 # Fixed cases only: the stable target takes its size/hash from the real signed
 # fixture. It cannot run until that fixture has been published and reviewed.
 CASES = {
+    'stable-3.6.4': dict(source='3.6.2', target='3.6.4', channel='stable',
+                       source_tag='v3.6.2', target_tag='v3.6.4'),
+    'preview-3.6.4': dict(source='3.6.2', target='3.6.4', channel='preview',
+                        source_tag='v3.6.2', target_tag='v3.6.4-preview.1'),
     'stable-3.6.2': dict(source='3.6.1', target='3.6.2', channel='stable',
                        source_tag='v3.6.1', target_tag='v3.6.2'),
     'historical': dict(source='3.5.2', target='3.6.0', channel='preview',
@@ -132,7 +137,7 @@ def feed_for_case(name):
         envelope = download(f'https://raw.githubusercontent.com/{REPO}/{FEED_COMMIT}/Updates/preview.feed', 65_536)
         require(hashlib.sha256(envelope).hexdigest() == FEED_SHA256, 'Original signed 3.6.0 feed changed.')
         return envelope
-    require(name in ('stable-3.6.1', 'stable-3.6.2'), 'Unknown acceptance case.')
+    require(name in ('stable-3.6.1', 'stable-3.6.2', 'stable-3.6.4', 'preview-3.6.4'), 'Unknown acceptance case.')
     fixture = pathlib.Path(__file__).resolve().parent / ('fixtures/published-' + name + '.feed')
     require(fixture.is_file() and not fixture.is_symlink(), 'The reviewed signed stable fixture is required.')
     with fixture.open('rb') as stream:

@@ -19,3 +19,7 @@ En avbruten ändring återställs till sitt föregående läge innan appen visar
 ## Symboler
 
 Knapparna använder Lucides färdiga **Volume 2** och **Volume Off**, med samma bildyta för båda lägena och plattformarna. Original, källversion och licens finns i `Assets/Lucide/`. Symbolerna får användas kostnadsfritt även kommersiellt enligt den medföljande ISC-licensen.
+
+Vid första anslutning och återanslutning försöker appen läsa läsarens faktiska ljudläge. Om det inte går visas en neutral väntesymbol i stället för ett gissat på/av-läge, och orsaken sparas i felrapporten. Appens egen ljudinställning fungerar fortfarande separat.
+
+På en verklig läsare med huvudfirmware **04.02.0100** har kommandot för ljudtabellen svarat `noSuchName` (MIB-status 2). Den läsarens webbgränssnitt visar det äldre upplägget USB Ready, Card Access, No USB och Keyboard Wedge. Den nuvarande ljudtabellsmetoden är därför inte verifierad eller tillgänglig där. Appen ändrar inte sekvenser när de inte kan läsas och säkerhetskopieras. Nyare kompatibla tabeller provas med simulerade svar; fysisk av/på-verifiering återstår.

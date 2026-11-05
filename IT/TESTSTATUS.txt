@@ -1,4 +1,4 @@
-BRICKLÄSAREN 3.6.3 – TESTSTATUS
+BRICKLÄSAREN 3.6.4 – TESTSTATUS
 
 Aktuella körningar och byggresultat:
 https://github.com/tstenkula/bricklasare/actions
@@ -17,3 +17,12 @@ körs lokalt och i CI med den kostnadsfria Gitleaks-klienten.
 
 Kör IT/Kor-sjalvtester.cmd för Windows-tester. Se Mac/VERIFIERING.md
 för Mac och IT/Verifiering.txt för kvarvarande hårdvaruprov.
+
+2026-11-05: användaren bekräftade fungerande anslutning med 3.6.3 på
+en tidigare använd läsare efter rättningen av tvåbytes-USB-heltal.
+Detta är inte en bekräftelse av alla bricktyper, pip eller Mac-hårdvara.
+
+Samma läsare med firmware 04.02.0100 avvisade ljudtabellens läskommando
+med MIB-status 2. Det är ett bekräftat kompatibilitetsproblem för
+ljudreglaget, inte ett bevis på att läsaren saknar styrbart ljud.
+Ingen ljudändring eller uppgradering av firmware har provats på den.

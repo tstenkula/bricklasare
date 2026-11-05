@@ -52,6 +52,14 @@ extension SelfTests {
               "App button leaves hardware state unchanged")
     try check(WorkflowSettings.load(store).sounds, "App preference persists")
     guard let view = controller.readerView else { throw fail("TEST", "Missing main view") }
+    controller.window.contentView?.layoutSubtreeIfNeeded()
+    let readerFrame = view.readerSoundButton.convert(view.readerSoundButton.bounds, to: nil)
+    let appFrame = view.appSoundButton.convert(view.appSoundButton.bounds, to: nil)
+    let helpFrame = view.helpButton.convert(view.helpButton.bounds, to: nil)
+    try check(abs(readerFrame.height - helpFrame.height) < 0.5 && abs(appFrame.height - helpFrame.height) < 0.5,
+              "Sound controls and Help share the same height")
+    try check(abs(appFrame.minY - helpFrame.minY) < 0.5 && helpFrame.minX - appFrame.maxX >= 10,
+              "Sound controls align with Help and keep a clear gap")
     try check(!view.appSoundButton.muted && !view.readerSoundButton.muted, "Both on icons")
     try check(view.appSoundButton.image?.size == NSSize(width: 24, height: 24)
       && view.appSoundButton.image?.representations.isEmpty == false
@@ -63,7 +71,8 @@ extension SelfTests {
     controller.toggleAppSound()
     try check(!view.readerSoundButton.isEnabled && !view.appSoundButton.isEnabled && controller.workflow.sounds,
               "Busy sound controls do not interrupt another operation")
-    controller.busy = false; controller.info = nil; controller.rebuild()
+    controller.busy = false; controller.info = nil; controller.readerSound = nil; controller.rebuild()
+    try check(!view.readerSoundButton.stateKnown && view.appSoundButton.stateKnown, "Unknown reader sound does not show a confirmed on/off state")
     try check(!view.readerSoundButton.isEnabled && view.appSoundButton.isEnabled,
               "App sound remains usable without a reader")
   }

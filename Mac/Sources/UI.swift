@@ -287,8 +287,9 @@ final class ReaderView {
     connectButton = ActionButton("Anslut läsare") { [weak controller] in controller?.connect() }
     readerSoundButton = SoundButton(reader: true) { [weak controller] in controller?.toggleReaderSound() }
     appSoundButton = SoundButton(reader: false) { [weak controller] in controller?.toggleAppSound() }
-    helpButton = ActionButton("Hjälp") { [weak controller] in controller?.help() }
+    helpButton = ActionButton("Hjälp", height: 44) { [weak controller] in controller?.help() }
     helpButton.widthAnchor.constraint(equalToConstant: 100).isActive = true
+    helpButton.heightAnchor.constraint(equalToConstant: 44).isActive = true
     bothButton = ActionButton("Kopiera båda numren", height: 34) { [weak controller] in
       guard let controller, let values = controller.outputs else { return }
       controller.copy("Eget passersystem (mR): \(values.0)\nHyresvärdens passersystem (eR): \(values.1)")
@@ -417,6 +418,7 @@ final class ReaderView {
     connectButton.isHidden = c.info != nil || c.busy
     connectButton.isEnabled = c.usbMonitor?.timedOut != true
     helpButton.isEnabled = !c.busy
+    readerSoundButton.stateKnown = c.readerSound != nil
     readerSoundButton.muted = c.readerSound == false
     readerSoundButton.isEnabled = !c.busy && !c.reconnectPending && c.info?.ready == true && c.readerSound != nil && c.usbMonitor?.timedOut != true
     appSoundButton.muted = !c.workflow.sounds
@@ -524,7 +526,7 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
       contentRect: NSRect(x: 0, y: 0, width: 900, height: 650),
       styleMask: [.titled, .closable, .miniaturizable, .resizable], backing: .buffered, defer: false
     )
-    window.title = "Brickläsaren · 3.6.3 · macOS"
+    window.title = "Brickläsaren · 3.6.4 · macOS"
     window.isReleasedWhenClosed = false
     window.minSize = NSSize(width: 800, height: 600)
     window.backgroundColor = Theme.paper
@@ -589,7 +591,7 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
   }
   @objc func aboutApp() {
     let a = NSAlert()
-    a.messageText = "Brickläsaren 3.6.3 för macOS"
+    a.messageText = "Brickläsaren 3.6.4 för macOS"
     a.informativeText =
       "Tobtech\n\nGratis för privat bruk. Kommersiellt bruk kräver en betald licens."
     a.addButton(withTitle: "Stäng")
@@ -714,8 +716,14 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
         }
         self.engine = reader
         let info = reader.info
-        let sound = try? ReaderSound.read(reader)
-        DispatchQueue.main.async { self.completeConnection(info, sound: sound) }
+        let sound: Bool?
+        let soundProblem: Bool
+        do { sound = try ReaderSound.read(reader); soundProblem = false }
+        catch { sound = nil; soundProblem = true }
+        DispatchQueue.main.async {
+          if soundProblem { self.latestErrorCode = "SOUND_READ" }
+          self.completeConnection(info, sound: sound)
+        }
       } catch { self.finishError(error, info: nil) }
     }
   }
@@ -734,7 +742,7 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
       (error as? ReaderError)?.message
       ?? "Inställningen kunde inte läsas eller sparas. Kontrollera filbehörigheterna."
     // Only bounded codes and app/platform versions are persisted, never exception payloads/APDUs/card IDs.
-    try? store.writeData("senaste-fel.txt", Data("Brickläsaren 3.6.3 macOS\nKod: \(code)\n".utf8))
+    try? store.writeData("senaste-fel.txt", Data("Brickläsaren 3.6.4 macOS\nKod: \(code)\n".utf8))
     DispatchQueue.main.async {
       self.info = self.reconnectPending ? nil : info
       self.latestErrorCode = code

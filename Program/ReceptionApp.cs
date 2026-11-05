@@ -140,6 +140,33 @@ namespace Tobtech.OmnikeyRco
         {
             int row = p.RowCount++; p.RowStyles.Add(new RowStyle(SizeType.AutoSize)); p.Controls.Add(c, 0, row);
         }
+        internal static void FitLogo(PictureBox logo)
+        {
+            if (logo.Image == null) return;
+            double scale = Math.Min((double)logo.MaximumSize.Width / logo.Image.Width,
+                (double)logo.MaximumSize.Height / logo.Image.Height);
+            // Match the control to the image aspect ratio. Zoom then has no empty
+            // side gutters that would shift a square/narrow logo away from the text.
+            logo.Size = new Size(Math.Max(1, (int)Math.Round(logo.Image.Width * scale)),
+                Math.Max(1, (int)Math.Round(logo.Image.Height * scale)));
+        }
+        internal static Rectangle FitWindowBounds(Rectangle bounds, Rectangle work)
+        {
+            int gap = Math.Min(12, Math.Max(0, Math.Min(work.Width, work.Height) / 20));
+            Rectangle available = Rectangle.Inflate(work, -gap, -gap);
+            int width = Math.Min(bounds.Width, Math.Max(1, available.Width));
+            int height = Math.Min(bounds.Height, Math.Max(1, available.Height));
+            int x = Math.Max(available.Left, Math.Min(bounds.Left, available.Right - width));
+            int y = Math.Max(available.Top, Math.Min(bounds.Top, available.Bottom - height));
+            return new Rectangle(x, y, width, height);
+        }
+        internal static void FitToScreen(Form dialog)
+        {
+            Rectangle bounds = FitWindowBounds(dialog.Bounds, Screen.FromControl(dialog).WorkingArea);
+            dialog.MinimumSize = new Size(Math.Min(dialog.MinimumSize.Width, bounds.Width),
+                Math.Min(dialog.MinimumSize.Height, bounds.Height));
+            dialog.Bounds = bounds;
+        }
         internal static void WrapLabels(Control parent)
         {
             int width = Math.Max(120, parent.ClientSize.Width - parent.Padding.Horizontal - 8);
@@ -169,9 +196,9 @@ namespace Tobtech.OmnikeyRco
         private bool statusWarning;
         private bool resourcesDisposed;
         private readonly string appearanceDirectory;
-        private readonly Label brand = Ui.Label("", 9F, true);
-        private readonly Label brandSubtitle = Ui.Label("", 10F, false);
-        private readonly PictureBox logo = new PictureBox { Size = new Size(180, 64), SizeMode = PictureBoxSizeMode.Zoom, Margin = new Padding(0, 0, 0, 8), AccessibleName = "Organisationens logotyp" };
+        private readonly Label brand = Ui.Label("", 12F, true);
+        private readonly Label brandSubtitle = Ui.Label("", 9.5F, false);
+        private readonly PictureBox logo = new PictureBox { Size = new Size(180, 64), MaximumSize = new Size(180, 64), SizeMode = PictureBoxSizeMode.Zoom, Margin = new Padding(0, 0, 0, 8), AccessibleName = "Organisationens logotyp" };
         private string mode = FormatProfiles.Combo;
         private string rcoChip = "M";
         private readonly Label subtitle = Ui.Label("En bricka. Två passersystem.", 11F, false);
@@ -216,7 +243,7 @@ namespace Tobtech.OmnikeyRco
 
             string iconPath = Path.Combine(ReceptionFiles.PackagePath, "Program", "Bricklasaren.ico");
             if (File.Exists(iconPath)) { try { using (Icon source = new Icon(iconPath)) appIcon = (Icon)source.Clone(); Icon = appIcon; } catch (ArgumentException) { } catch (IOException) { } catch (UnauthorizedAccessException) { } }
-            Text = "Brickläsaren · 3.6.3";
+            Text = "Brickläsaren · 3.6.4";
             Font = Ui.GetFont(10F); ForeColor = Ui.Ink; BackColor = Ui.Paper;
             AutoScaleMode = AutoScaleMode.Dpi; AutoScaleDimensions = new SizeF(96F, 96F);
             StartPosition = FormStartPosition.CenterScreen;
@@ -234,7 +261,8 @@ namespace Tobtech.OmnikeyRco
             TableLayoutPanel tools = Ui.Stack(); tools.Margin = new Padding(18, 3, 0, 0);
             connection.ForeColor = Ui.Muted; connection.MaximumSize = new Size(250, 0); connection.TextAlign = ContentAlignment.MiddleRight;
             connection.AccessibleRole = AccessibleRole.StaticText;
-            help.Anchor = AnchorStyles.Top | AnchorStyles.Right; help.Margin = new Padding(0, 4, 0, 0); help.TabIndex = 0;
+            help.Anchor = AnchorStyles.Top | AnchorStyles.Left; help.AutoSize = false;
+            help.Size = help.MinimumSize = help.MaximumSize = new Size(100, 44); help.Margin = new Padding(12, 0, 0, 0); help.TabIndex = 0;
             Ui.Add(tools, connection); InitializeSoundButtons(tools);
             header.Controls.Add(heading, 0, 0); header.Controls.Add(tools, 1, 0); Ui.Add(root, header);
             statusPanel.SurfaceColor = Ui.AccentLight; statusPanel.Padding = new Padding(18, 12, 18, 12);
@@ -315,7 +343,7 @@ namespace Tobtech.OmnikeyRco
                 e.Cancel = true; RequestCancel();
                 notice.Text = "Låt programmet arbeta klart. Stäng sedan fönstret igen.";
             };
-            log.Add("Receptionsgränssnitt 3.6.3 (PowerShell). Lokal diagnostik utan råa kortdata.");
+            log.Add("Receptionsgränssnitt 3.6.4 (PowerShell). Lokal diagnostik utan råa kortdata.");
             ApplyAppearance(); ApplyModeUi(); UpdateButtons(); ResumeLayout(true);
             if (previewOnly) connection.Text = "Förhandsvisning · ingen läsarkontakt";
         }
@@ -327,9 +355,9 @@ namespace Tobtech.OmnikeyRco
             brand.Text = settings.Organization; brand.Visible = brand.Text.Length > 0; brand.ForeColor = Ui.AccentDark;
             brandSubtitle.Text = settings.Subtitle; brandSubtitle.Visible = brandSubtitle.Text.Length > 0; brandSubtitle.ForeColor = Ui.Muted;
             Image previous = logo.Image;
-            logo.Image = AppearanceFiles.LoadDisplayLogo(appearanceDirectory, settings, new Size(Math.Max(1, logo.Width * 2), Math.Max(1, logo.Height * 2)));
+            logo.Image = AppearanceFiles.LoadDisplayLogo(appearanceDirectory, settings, new Size(Math.Max(1, logo.MaximumSize.Width * 2), Math.Max(1, logo.MaximumSize.Height * 2)));
             if (previous != null) previous.Dispose();
-            logo.Visible = logo.Image != null;
+            logo.Visible = logo.Image != null; Ui.FitLogo(logo);
             notice.ForeColor = Ui.AccentDark;
             statusPanel.SurfaceColor = statusWarning ? Color.FromArgb(255, 241, 221) : Ui.AccentLight;
             stage.ForeColor = statusWarning ? Color.FromArgb(127, 71, 9) : Ui.AccentDark;
@@ -609,7 +637,7 @@ namespace Tobtech.OmnikeyRco
                         notice.Text = "Läsarprofilen kunde inte användas. Be IT kontrollera den via Hjälp.";
                     }
                 }
-                if (outputProtected && !reader.HasPendingRecovery) { try { readerSound = await Task.Run(delegate { return candidate.ReadReaderSound(); }); } catch { readerSound = null; } }
+                if (outputProtected && !reader.HasPendingRecovery) { try { readerSound = await Task.Run(delegate { return candidate.ReadReaderSound(); }); } catch (Exception soundError) { readerSound = null; SaveError(soundError, ConnectionPhase.ReadSoundState); } }
                 phase = ConnectionPhase.SavePreferences;
                 ReceptionFiles.SaveAddress(address); ReadyMessage();
             }
@@ -1021,12 +1049,15 @@ namespace Tobtech.OmnikeyRco
             Button test = ActionButton("Kontrollera referensbricka", "Reference"); test.Enabled = protectedOutput && connected && !pending;
             Button restore = ActionButton("Återställ läsaren", "Recover"); restore.Enabled = pending;
             service.Controls.Add(test); service.Controls.Add(restore); Ui.Add(advanced, service);
-            Ui.Add(advanced, Ui.Label("Version 3.6.3 · PowerShell · Programmet läser bricknummer.\r\nTobtech", 9F, false));
+            Ui.Add(advanced, Ui.Label("Version 3.6.4 · PowerShell · Programmet läser bricknummer.\r\nTobtech", 9F, false));
+            Shown += delegate { Ui.FitToScreen(this); };
             more.Click += delegate
             {
                 advanced.Visible = !advanced.Visible;
-                int availableHeight = Math.Max(300, Screen.FromControl(this).WorkingArea.Height - 90);
-                ClientSize = new Size(610, Math.Min(advanced.Visible ? 1020 : 425, availableHeight));
+                float scale;
+                using (Graphics graphics = CreateGraphics()) scale = graphics.DpiY / 96F;
+                ClientSize = new Size(ClientSize.Width, (int)Math.Round((advanced.Visible ? 1020 : 425) * scale));
+                Ui.FitToScreen(this);
                 more.Text = advanced.Visible ? "Dölj IT-inställningar" : "IT-inställningar";
             };
         }

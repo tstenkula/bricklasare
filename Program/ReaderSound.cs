@@ -82,6 +82,15 @@
             if (fw.Tag != 2 || Codec.ToHex(fw.Value) != Firmware) throw new IOException("Läsarens firmware har ändrats. Anslut igen.");
             if (!Connected || HasPendingRecovery) throw new InvalidOperationException("Återställ läsaren innan ljudet ändras.");
         }
+        internal string InspectReaderSound()
+        {
+            // Read-only diagnostic: never invoke pending-sound recovery here.
+            CheckSoundIdentity();
+            ReaderSoundBackup backup = ReadSoundBackup();
+            byte[] table = ReadSoundTable();
+            return "ReaderSound: " + (HasSound(table) ? "På" : "Av") + "\r\nSoundRecovery: " +
+                (backup != null && !String.IsNullOrEmpty(backup.Pending) ? "Väntar" : "Ingen");
+        }
         internal bool ReadReaderSound()
         {
             CheckSoundIdentity();
@@ -144,10 +153,11 @@
     internal sealed class SoundButton : Button
     {
         internal bool ReaderIcon, Muted;
+        internal bool StateKnown = true;
         private readonly Image onIcon, offIcon;
         internal SoundButton(bool reader)
         {
-            ReaderIcon = reader; Size = new Size(48, 48); MinimumSize = Size; MaximumSize = Size;
+            ReaderIcon = reader; Size = new Size(44, 44); MinimumSize = Size; MaximumSize = Size;
             FlatStyle = FlatStyle.Flat; FlatAppearance.BorderSize = 0; Cursor = Cursors.Hand;
             BackColor = Color.White; Margin = new Padding(0); TabStop = true;
             SetStyle(ControlStyles.UserPaint | ControlStyles.OptimizedDoubleBuffer, true);
@@ -168,7 +178,7 @@
             e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
             e.Graphics.Clear(Focused || ClientRectangle.Contains(PointToClient(Control.MousePosition)) ? Ui.AccentLight : Color.White);
             float scale = e.Graphics.DpiX / 96F;
-            int size = (int)Math.Round(22 * scale), top = (int)Math.Round(5 * scale);
+            int size = (int)Math.Round(20 * scale), top = (int)Math.Round(4 * scale);
             Rectangle iconArea = new Rectangle((Width - size) / 2, top, size, size);
             Color ink = Enabled ? Ui.Accent : Ui.Muted;
             Image icon = Muted ? offIcon : onIcon;
@@ -179,7 +189,9 @@
                     new float[] { 0, 0, 0, 1, 0 }, new float[] { ink.R / 255F, ink.G / 255F, ink.B / 255F, 0, 1 } });
                 tint.SetColorMatrix(matrix);
                 e.Graphics.InterpolationMode = InterpolationMode.HighQualityBicubic;
-                e.Graphics.DrawImage(icon, iconArea, 0, 0, icon.Width, icon.Height, GraphicsUnit.Pixel, tint);
+                if (StateKnown) e.Graphics.DrawImage(icon, iconArea, 0, 0, icon.Width, icon.Height, GraphicsUnit.Pixel, tint);
+                else TextRenderer.DrawText(e.Graphics, "…", Ui.GetFont(12F), iconArea, ink,
+                    TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
             }
             Rectangle labelArea = new Rectangle(0, Height - (int)Math.Round(16 * scale), Width, (int)Math.Round(12 * scale));
             TextRenderer.DrawText(e.Graphics, ReaderIcon ? "Läsare" : "App", Ui.GetFont(8F), labelArea, ink, TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
@@ -206,9 +218,9 @@
         }
         private void UpdateSoundButtons()
         {
-            readerSoundButton.Muted = readerSound == false; readerSoundButton.Enabled = !busy && IsReady && readerSound.HasValue;
+            readerSoundButton.StateKnown = readerSound.HasValue; readerSoundButton.Muted = readerSound == false; readerSoundButton.Enabled = !busy && IsReady && readerSound.HasValue;
             appSoundButton.Muted = !workflow.Sounds; appSoundButton.Enabled = !busy;
-            string r = readerSound.HasValue ? "Läsarens pip: " + (readerSound.Value ? "på. Klicka för att stänga av." : "av. Klicka för att slå på.") : "Läsarens pip: läget är inte tillgängligt. Anslut läsaren igen.";
+            string r = readerSound.HasValue ? "Läsarens pip: " + (readerSound.Value ? "på. Klicka för att stänga av." : "av. Klicka för att slå på.") : "Läsarens pip: ljudläget kunde inte bekräftas. Spara en felrapport via Hjälp om läsaren är ansluten.";
             string a = "Appens ljud: " + (workflow.Sounds ? "på. Klicka för att stänga av." : "av. Klicka för att slå på.");
             readerSoundButton.AccessibleName = r; appSoundButton.AccessibleName = a;
             soundTips.SetToolTip(readerSoundButton, r); soundTips.SetToolTip(appSoundButton, a);

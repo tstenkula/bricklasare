@@ -19,4 +19,4 @@ Metodnamnen i rapporten kommer från programmets källkod. De innehåller inga a
 
 Att version 3.1 fungerade bekräftar inte att senare USB-förberedelse har lyckats. Radera inte original- eller återställningsfiler och återställ inte läsaren till fabriksinställningar som första felsökningssteg. Rapporten hjälper oss att skilja en läsarkompatibilitet från ett lokalt filproblem.
 
-Från 3.6.3 godkänner Windows både `00`/`FF` och heltalsrepresentationerna `0000`/`00FF` för USB-läget (av/på). Andra värden och fel datatyper stoppas fortfarande. En verklig läsare har rapporterat INTEGER med två byte; anslutning och skanning med rättningen behöver också provas på den.
+Från 3.6.3 godkänner Windows både `00`/`FF` och heltalsrepresentationerna `0000`/`00FF` för USB-läget (av/på). Andra värden och fel datatyper stoppas fortfarande. En verklig läsare har rapporterat INTEGER med två byte; anslutningen med 3.6.3 har därefter bekräftats fungera på den läsaren. Själva brickläsningen och övriga hårdvaruprov behöver fortfarande bekräftas.

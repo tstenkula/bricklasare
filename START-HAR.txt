@@ -1,4 +1,4 @@
-﻿BRICKLÄSAREN – 3.6.3
+﻿BRICKLÄSAREN – 3.6.4
 
 1. Packa upp hela zip-filen i en egen mapp.
 2. Starta Starta-Bricklasaren.cmd.

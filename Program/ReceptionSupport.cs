@@ -1,4 +1,4 @@
-﻿// Reception v3.6.3 (PowerShell). Reader protocol remains in OmnikeyCore.cs.
+﻿// Reception v3.6.4 (PowerShell). Reader protocol remains in OmnikeyCore.cs.
 namespace Tobtech.OmnikeyRco
 {
     using System;
@@ -50,6 +50,8 @@ namespace Tobtech.OmnikeyRco
             catch (Exception error) { report.Append("SavedUsbState: ").Append(ReceptionFiles.SafeError(error)).Append("\r\n"); }
             report.Append("ScanRecovery: ").Append(reader.HasPendingRecovery ? "Väntar" : "Ingen").Append("\r\n");
             report.Append("LocalProfile: ").Append(reader.CalibrationIssue != null ? "Behöver kontrolleras" : reader.Cal != null ? "Godkänd" : "Standardformat").Append("\r\n");
+            try { report.Append(reader.InspectReaderSound()).Append("\r\n"); }
+            catch (Exception error) { report.Append("ReaderSound: ").Append(ReceptionFiles.SafeError(error)).Append("\r\n"); }
             return report.ToString();
         }
         internal static string Code(Exception error)
@@ -66,6 +68,10 @@ namespace Tobtech.OmnikeyRco
                 case "Den avbrutna USB-förberedelsen kunde inte verifieras. Behåll konfigurationsfilerna och kontakta IT.": return "USB_PENDING_INVALID";
                 case "USB-konfigurationsfilen är för stor.": return "USB_STATE_SIZE";
                 case "USB-konfigurationsfilen kunde inte läsas.": return "USB_STATE_JSON";
+                case "Läsarens ljudformat stöds inte.": return "SOUND_TABLE_FORMAT";
+                case "Läsaren kunde inte lämna sitt ljudläge.": return "SOUND_TABLE_TYPE";
+                case "Den sparade ljudinställningen är ogiltig.": return "SOUND_BACKUP_SIZE";
+                case "Ljudinställningen gäller inte den här läsaren och firmware.": return "SOUND_BACKUP_IDENTITY";
                 case "För stort HTTP-huvud från läsaren.": return "HTTP_HEADER_SIZE";
                 case "Avklippt HTTP-svar från läsaren.": return "HTTP_LINE_TRUNCATED";
                 case "Ogiltigt HTTP-svar från läsaren.": return "HTTP_LINE_FORMAT";
@@ -342,8 +348,8 @@ namespace Tobtech.OmnikeyRco
         {
             lock (errorGate)
             {
-                return "BRICKLÄSAREN RECEPTION 3.6.3 – POWERSHELL\r\n" +
-                    "Läsarmotor: v3.6.3, standardformat med frivillig lokal IT-kalibrering.\r\n" +
+                return "BRICKLÄSAREN RECEPTION 3.6.4 – POWERSHELL\r\n" +
+                    "Läsarmotor: v3.6.4, standardformat med frivillig lokal IT-kalibrering.\r\n" +
                     "Rapport skapad: " + DateTime.Now.ToString("s") + "\r\n" +
                     "Diagnostik: anslutning 1.\r\n" +
                     "Inga skannade nummer, råsvar, sökvägar eller undantagsmeddelanden ingår.\r\n\r\n" +
@@ -452,7 +458,7 @@ namespace Tobtech.OmnikeyRco
         {
             get
             {
-                return "BRICKLÄSAREN 3.6.3\r\n\r\n" +
+                return "BRICKLÄSAREN 3.6.4\r\n\r\n" +
                     "Starta med " + ReceptionFiles.LauncherName + ".\r\n" +
                     "Första gången väljer du vilket passersystem du ska läsa för.\r\n" +
                     "Valet sparas direkt och används automatiskt vid nästa start.\r\n" +
@@ -649,6 +655,10 @@ namespace Tobtech.OmnikeyRco
                 check(!summary.Contains(Path.GetTempPath()));
             }
             check(mibRejected);
+            bool shortError = false;
+            try { Codec.MibResponse("02020104010100", Codec.Hex("0302009000")); }
+            catch (ReaderMibException missing) { shortError = missing.Status == 2 && missing.Index == 0 && missing.Command == "IndicatorSequences"; }
+            check(shortError);
             string unknown = ReceptionFiles.SafeError(new ReaderMibException(privateMessage, 2, 1));
             check(unknown.Contains("Other") && !unknown.Contains("01020304"));
             check(ReceptionFiles.SafeError(new IOException(privateMessage, new ReaderMibException("04010500", 2, 1))).Contains("UsbOutputMode"));
