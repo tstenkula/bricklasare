@@ -60,3 +60,8 @@ non-infringement. Tobtech is not liable for indirect or consequential loss,
 lost data, profits, or business interruption arising from the Software. These
 limitations do not exclude liability or consumer rights that cannot lawfully
 be excluded. Verify read results and suitability for the intended access system.
+
+Third-party components
+Lucide icons and their rendered images retain the upstream terms in
+Assets/Lucide/LICENSE.txt (Mac package: Contents/Resources/Lucide/LICENSE.txt).
+This Tobtech license does not replace or restrict those third-party permissions.

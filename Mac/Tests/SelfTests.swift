@@ -5,9 +5,14 @@ final class MockReader: ReaderTransport {
   let name = "OMNIKEY simulated"
   static let identity = Array(UInt8(1)...UInt8(16))
   var settings: [String: TLV] = [:], mutations = 0, presentValue = false, reads = 0, closed = false
+  var soundFailure: Int?
   var readFailure = false, unstable = false, recoveryFailure = false, changingIdentity = false
   init(board: UInt8 = 6) {
     for oid in ReaderEngine.polls { settings[oid] = TLV(tag: 1, value: [255]) }
+    var sound = [UInt8](repeating: 165, count: 130)
+    for i in 0..<39 { sound[i] = 0 }
+    for sequence in 0..<3 { sound[sequence * 13] = 17; sound[sequence * 13 + 1] = 2; sound[sequence * 13 + 2] = 1; sound[sequence * 13 + 3] = 1 }
+    settings[ReaderSound.oid] = TLV(tag: 4, value: sound)
     settings[ReaderEngine.ask] = TLV(tag: 4, value: [9, 8, 7, 6, 5, 4, 3, 2])
     settings[ReaderEngine.keyboard] = TLV(tag: 1, value: [0])
     settings[ReaderEngine.custom] = TLV(tag: 2, value: [0])
@@ -19,6 +24,15 @@ final class MockReader: ReaderTransport {
   func close() { closed = true }
   func exchange(_ b: [UInt8]) throws -> [UInt8] {
     try require(!closed, "Mock transport closed")
+    if b.count >= 4 && b[2] == 3 {
+      if b == [255, 104, 3, 128] { return [0x90, 0] }
+      let sequence = Int(b[3]) - 0x40
+      try require((0..<3).contains(sequence) && b.count == 18 && b[4] == 13, "Unexpected sound command")
+      mutations += 1
+      settings[ReaderSound.oid]!.value.replaceSubrange((sequence * 13)..<(sequence * 13 + 13), with: b.dropFirst(5))
+      if soundFailure == sequence { soundFailure = nil; throw fail("SIMULATED_SOUND", "Simulated lost sound response") }
+      return [0x90, 0]
+    }
     if b == (try Codec.hex("FF6800010101")) { return [0x90, 0] }
     if try b == Codec.hex("FFCA000000") || b == Codec.hex("FF70076B07A005A10380010400") {
       reads += 1
@@ -40,7 +54,7 @@ final class MockReader: ReaderTransport {
     }
     guard var t = settings[oid] else { throw fail("SIMULATED_OID", "Unexpected OID") }
     if changingIdentity && oid == "010A00" { t.value = Array(repeating: 42, count: 16) }
-    return [3, 0, 0, 13, UInt8(length)] + (try Codec.hex(oid)) + [t.tag, UInt8(t.value.count)]
+    return [3, 0, 0, 13, UInt8(length)] + (try Codec.hex(oid)) + [t.tag] + (t.value.count >= 128 ? [0x81, UInt8(t.value.count)] : [UInt8(t.value.count)])
       + t.value + [0x90, 0]
   }
 }
@@ -73,6 +87,7 @@ struct SelfTests {
   static func run() throws {
     let store = try tempStore()
     defer { try? FileManager.default.removeItem(at: store.root) }
+    try readerSoundTests()
     try updates(store)
     try check(
       Codec.text(try Codec.mib("010100")) == "FF6800000A0000000D03010100050000",
@@ -402,8 +417,14 @@ struct SelfTests {
     c.info = ReaderInfo(
       board: "OMNIKEY 5427 CK", id: "", firmware: "", profile: "Standardformat", pending: false,
       ready: true)
+    c.readerSound = true
     c.readyMessage()
     c.rebuild()
+    for readerOn in [true, false] { for appOn in [true, false] {
+      c.readerSound = readerOn; c.workflow.sounds = appOn; c.rebuild()
+      try snapshot(c.window, to: folder.appendingPathComponent("ljud-lasare-\(readerOn)-app-\(appOn).png"))
+    } }
+    c.readerSound = true; c.workflow.sounds = false; c.rebuild()
     try snapshot(c.window, to: folder.appendingPathComponent("marinbla-klar.png"))
     c.outputs = ("025800772", "051501029")
     c.readyMessage()
@@ -472,6 +493,6 @@ struct SelfTests {
     try snapshot(workflow, to: folder.appendingPathComponent("arbetsflode.png"))
     workflow.close()
     c.window.close()
-    print("Rendered 17 interface images with synthetic data; no hardware accessed.")
+    print("Rendered interface images with synthetic data; no hardware accessed.")
   }
 }

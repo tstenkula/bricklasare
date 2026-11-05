@@ -100,9 +100,7 @@ extension AppController {
     ])
     copy.selectItem(at: workflow.copy)
     copy.setAccessibilityLabel("Kopiera automatiskt")
-    let sounds = NSButton(
-      checkboxWithTitle: "Ljud för lägg på, lyft bort och klart", target: nil, action: nil)
-    sounds.state = workflow.sounds ? .on : .off
+
     let channel = NSPopUpButton()
     channel.addItems(withTitles: ["Stabil", "Förhandsversioner"])
     channel.selectItem(at: workflow.channel == "preview" ? 1 : 0)
@@ -114,7 +112,7 @@ extension AppController {
     let root = stack(
       [
         label("Arbetsflöde", size: 24, bold: true),
-        label("Kopiera automatiskt efter en helt avslutad läsning"), copy, sounds,
+        label("Kopiera automatiskt efter en helt avslutad läsning"), copy,
         label("⌘R: Läs • Esc: Avbryt • ⌘1 / 2 / 3: Kopiera", size: 12),
         label("Uppdateringar", size: 20, bold: true), channel, auto,
         label(
@@ -124,7 +122,7 @@ extension AppController {
     let save = button("Spara", primary: true) { [weak self, weak d] in
         guard let self else { return }
         let next = WorkflowSettings(
-          copy: copy.indexOfSelectedItem, sounds: sounds.state == .on,
+          copy: copy.indexOfSelectedItem, sounds: workflow.sounds,
           channel: channel.indexOfSelectedItem == 1 ? "preview" : "stable",
           autoCheck: auto.state == .on)
         do {

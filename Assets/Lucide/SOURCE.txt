@@ -1,0 +1,5 @@
+Lucide Icons
+https://github.com/lucide-icons/lucide
+Commit: 1c93e0a4762b39bdcce48ba1f07a20bb45f1da59
+Original volume-2 and volume-off SVG files; PNGs are transparent renders of these files.
+See LICENSE.txt for the upstream licence, retained in all packages.

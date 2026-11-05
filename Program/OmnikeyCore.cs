@@ -1,6 +1,7 @@
 ﻿// OMNIKEY RCO v2.0 - hardware-test build. C# 5 / .NET Framework 4.5+.
 // Protocol: HID 5127-903 B.7 sections 3.2.3, 9.2.2, 9.4.1, A.2, A.8-A.13, A.16, B.2.2-B.2.3.
-// Changes only the allow-listed polling settings and ASK keyboard data selection.
+// Scan sessions change only allow-listed polling and ASK data selection.
+// ReaderSound.cs separately journals public indicator-sequence sound changes.
 // Apply Changes writes reader flash; every session is journalled and restored.
 // Does NOT write cards, change keys, disable EEM, reset to factory defaults or install drivers.
 namespace Tobtech.OmnikeyRco
@@ -228,7 +229,7 @@ namespace Tobtech.OmnikeyRco
             lock (gate) return "OMNIKEY RCO v2.0 testversion\r\n" + DateTime.Now.ToString("s") + "\r\n" + String.Join("\r\n", lines.ToArray());
         }
     }
-    public sealed class ReaderClient
+    public sealed partial class ReaderClient
     {
         public const string AskDataOid = "040C0200";
         public static readonly PollSetting[] Polls = new PollSetting[] {

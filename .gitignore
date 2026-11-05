@@ -69,3 +69,6 @@ ui-test-images/
 # Python release tooling
 __pycache__/
 *.pyc
+
+# Per-reader audio preference and recovery journal
+lasarljud-*.json

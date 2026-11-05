@@ -1,4 +1,4 @@
-BRICKLÄSAREN 3.6.1 – VERIFIERING
+BRICKLÄSAREN 3.6.2 – VERIFIERING
 
 Tobtech-projekt med neutral standardprofil. Aktuell teststatus redovisas
 av GitHub Actions för Windows och macOS. Äldre leveransloggar och byggen
@@ -20,7 +20,7 @@ under läsning, vila/återanslutning och längre drift. Att resurstesterna
 passerar är inte ett bevis på att alla tänkbara minnesläckor är uteslutna.
 
 Uppdateringskällan är publik och kan hämtas utan inloggning. Den stabila
-kanalen används för stabila utgåvor. 3.6.1 är stabil; hårdvaruprovet
+kanalen används för stabila utgåvor. 3.6.2 är stabil; hårdvaruprovet
 återstår. Ingen OS-kodsignering eller notariering har införts.
 
 CHECKLISTA FÖR GODKÄND HÅRDVARUKÖRNING
@@ -43,7 +43,14 @@ läsarmodell/firmware och godkänt/underkänt utan att spara kortnummer.
     och starta om. Kontrollera inställningar och att föregående version
     finns kvar. Windows utgivarvarning och Mac-skydd ska också provas.
 
-3.6.1 är stabil; ovanstående hårdvaruprov återstår.
+3.6.2 är stabil; ovanstående hårdvaruprov återstår.
 Ett misslyckat prov dokumenteras och rättas; ett ej utfört prov räknas
 inte som godkänt. Anteckna testresultaten innan stödet beskrivs som
 verifierat med verklig hårdvara.
+
+Ljudknappar (3.6.2):
+[ ] Läsare av/på påverkar läsarens pip vid normal läsning med datorns volym på noll.
+[ ] App av/på påverkar bara instruktionernas datorljud.
+[ ] Lysdioder och deras tider är oförändrade efter läsarens ljudbyte.
+[ ] Läsarens val finns kvar efter omstart och urkoppling/återanslutning.
+[ ] Urkoppling under ljudbyte kan återställas med samma läsare; symbolen visar inte ett obekräftat läge.

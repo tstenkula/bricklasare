@@ -52,7 +52,6 @@
             Ui.Add(root, Ui.Label("Kopiera automatiskt efter en helt avslutad läsning", 11, false));
             ComboBox copy = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Dock = DockStyle.Top, AccessibleName = "Kopiera automatiskt", TabIndex = 0, Margin = new Padding(0, 0, 0, 8) };
             copy.Items.AddRange(new object[] { "Av", "Första numret", "Andra numret (om det finns)", "Båda med rubriker (MIFARE + EM)" }); copy.SelectedIndex = value.Copy; Ui.Add(root, copy);
-            CheckBox sounds = new CheckBox { Text = "Ljud för lägg på, lyft bort och klart", Checked = value.Sounds, AutoSize = true, TabIndex = 1, Margin = new Padding(0, 0, 0, 8) }; Ui.Add(root, sounds);
             Label shortcuts = Ui.Label("Ctrl+R: Läs · Esc: Avbryt · Ctrl+1 / 2 / 3: Kopiera", 9.5F, false); shortcuts.ForeColor = Ui.Muted; shortcuts.Margin = new Padding(0, 0, 0, 18); Ui.Add(root, shortcuts);
             Ui.Add(root, Ui.Label("Uppdateringar", 17, true));
             Ui.Add(root, Ui.Label("Versioner", 10, true));
@@ -65,11 +64,11 @@
             actions.Controls.Add(save); actions.Controls.Add(cancel); Controls.Add(actions);
             root.SizeChanged += delegate {
                 Ui.WrapLabels(root); int width = Math.Max(120, root.ClientSize.Width - root.Padding.Horizontal - 8);
-                sounds.MaximumSize = new Size(width, 0); auto.MaximumSize = new Size(width, 0);
+                auto.MaximumSize = new Size(width, 0);
             };
             save.Click += delegate {
                 try {
-                    WorkflowSettings next = new WorkflowSettings { Copy = copy.SelectedIndex, Sounds = sounds.Checked, Channel = channel.SelectedIndex == 1 ? "preview" : "stable", AutoCheck = auto.Checked };
+                    WorkflowSettings next = new WorkflowSettings { Copy = copy.SelectedIndex, Sounds = value.Sounds, Channel = channel.SelectedIndex == 1 ? "preview" : "stable", AutoCheck = auto.Checked };
                     ReceptionFiles.WriteAtomic(Path.Combine(directory, "arbetsflode.json"), new JavaScriptSerializer().Serialize(next)); Value = next; DialogResult = DialogResult.OK; Close();
                 } catch { MessageBox.Show(this, "Inställningarna kunde inte sparas."); }
             };

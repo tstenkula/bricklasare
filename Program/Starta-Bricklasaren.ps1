@@ -23,7 +23,7 @@ try {
     Add-Type -AssemblyName System.Web.Extensions
 
     $utf8 = New-Object System.Text.UTF8Encoding($true)
-    $files = @('Entry.cs', 'OmnikeyCore.cs', 'ReaderNetwork.cs', 'ReaderNetworkTests.cs', 'ReceptionSupport.cs', 'ReaderSafety.cs', 'Appearance.cs', 'SettingsDialogs.cs', 'FirstStart.cs', 'Workflow.cs', 'Updates.cs', 'ReliabilityTests.cs', 'ReceptionApp.cs')
+    $files = @('Entry.cs', 'OmnikeyCore.cs', 'ReaderSound.cs', 'ReaderNetwork.cs', 'ReaderNetworkTests.cs', 'ReceptionSupport.cs', 'ReaderSafety.cs', 'Appearance.cs', 'SettingsDialogs.cs', 'FirstStart.cs', 'Workflow.cs', 'Updates.cs', 'ReliabilityTests.cs', 'ReceptionApp.cs')
     $parts = foreach ($name in $files) {
         $path = Join-Path $PSScriptRoot $name
         if (-not (Test-Path -LiteralPath $path -PathType Leaf)) {

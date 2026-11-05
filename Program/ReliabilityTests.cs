@@ -33,6 +33,7 @@
             {
                 Application.EnableVisualStyles(); Application.SetCompatibleTextRenderingDefault(false);
                 count += ReaderNetworkTests.Run();
+                ExerciseReaderSound(Path.Combine(directory, "reader-sound"));
                 ExerciseUpdates(directory);
                 ExerciseFirstStart(Path.Combine(directory, "first-start"));
                 ExerciseReaderWorkspace(Path.Combine(directory, "workspace"));
@@ -188,7 +189,7 @@
             FakeReader fake = new FakeReader();
             ReaderClient reader = new ReaderClient("192.168.63.99", directory, new LocalLog()); reader.TestTransport = fake.Send; reader.Connect();
             ReceptionForm form = new ReceptionForm(true, directory);
-            SetField(form, "reader", reader); SetField(form, "profileChosen", true); SetField(form, "outputProtected", true); SetField(form, "mode", mode);
+            SetField(form, "reader", reader); SetField(form, "readerSound", (bool?)true); SetField(form, "profileChosen", true); SetField(form, "outputProtected", true); SetField(form, "mode", mode);
             Call(form, "ApplyModeUi"); return form;
         }
         private static void PreviewResults(ReceptionForm form, string first, string second)
@@ -552,13 +553,61 @@
                 Check(!File.Exists(Path.Combine(root,"escape")), "Traversal never writes outside staging");
             }
         }
+        private static void ExerciseReaderSound(string directory)
+        {
+            Directory.CreateDirectory(directory);
+            foreach (byte board in new byte[] { 6, 10 })
+            {
+                string local = Path.Combine(directory, board.ToString()); Directory.CreateDirectory(local);
+                FakeReader fake = new FakeReader { Board = board };
+                ReaderClient reader = new ReaderClient("192.168.63.99", local, new LocalLog()); reader.TestTransport = fake.Send; reader.Connect();
+                byte[] original = (byte[])fake.SoundTable.Clone();
+                Check(reader.ReadReaderSound(), "Hardware sound is read rather than inferred from PC volume");
+                Check(!reader.SetReaderSound(false) && !reader.ReadReaderSound(), "Reader mute is confirmed by readback");
+                byte[] muted = (byte[])fake.SoundTable.Clone();
+                Check(muted.SequenceEqual(ReaderClient.QuietSound(original)), "Only buzzer bits in public sequences changed");
+                Check(muted.Skip(39).SequenceEqual(original.Skip(39)), "Internal reader sequences untouched");
+                int writes = fake.Writes; Check(!reader.SetReaderSound(false) && fake.Writes == writes, "An unchanged mute state does not write flash");
+                Check(reader.SetReaderSound(true) && original.SequenceEqual(fake.SoundTable), "Unmute restores exact original pattern and LEDs");
+                fake.SoundFailure = 1;
+                bool failed = false; try { reader.SetReaderSound(false); } catch (IOException) { failed = true; }
+                Check(failed && original.SequenceEqual(fake.SoundTable) && reader.ReadReaderSound(), "Partial and ambiguous writes roll back before reporting failure");
+                Check(WorkflowSettings.Load(local).Sounds == false && reader.ReadReaderSound(), "Hardware sound and app preference are independent");
+                string journal = Path.Combine(local, "aterstall-" + reader.ReaderId + ".json"); File.WriteAllText(journal, "pending");
+                writes = fake.Writes; failed = false; try { reader.SetReaderSound(false); } catch (InvalidOperationException) { failed = true; }
+                Check(failed && fake.Writes == writes, "Pending card recovery prevents sound writes"); File.Delete(journal);
+                File.Delete(Path.Combine(local, "lasarljud-" + reader.ReaderId + ".json")); fake.SoundTable = (byte[])muted.Clone();
+                Check(reader.SetReaderSound(true) && ReaderClient.QuietSound(fake.SoundTable).SequenceEqual(muted), "Initially silent reader uses existing timing and off-step without altering LEDs");
+                fake.SoundTable = new byte[129]; Reject(delegate { reader.ReadReaderSound(); }, "Unknown firmware table layout is rejected without guessing");
+            }
+            using (ReceptionForm form = ReaderPreview(Path.Combine(directory, "ui"), FormatProfiles.Combo))
+            {
+                SoundButton app = Field<SoundButton>(form, "appSoundButton"), hardware = Field<SoundButton>(form, "readerSoundButton");
+                form.Show(); Application.DoEvents(); Call(form, "UpdateButtons");
+                Check(hardware.Enabled && !hardware.Muted && app.Muted, "Separate hardware-on and app-off icons");
+                Check(hardware.Size == app.Size && hardware.Top == app.Top, "Sound icon slots and baselines align");
+                app.PerformClick();
+                Check(Field<WorkflowSettings>(form, "workflow").Sounds && Field<bool?>(form, "readerSound") == true, "App icon toggles only the app preference");
+                Check(WorkflowSettings.Load(Path.Combine(directory, "ui")).Sounds, "App sound choice persists");
+                Call(form, "SetBusy", true); Check(!hardware.Enabled && !app.Enabled, "Sound controls cannot interrupt an active reader or update operation");
+                Call(form, "SetBusy", false); SetField(form, "readerSound", (bool?)false); Call(form, "UpdateButtons"); Check(hardware.Muted && !app.Muted, "Mute symbols remain independent");
+                foreach (bool readerOn in new bool[] { true, false }) foreach (bool appOn in new bool[] { true, false })
+                {
+                    SetField(form, "readerSound", (bool?)readerOn); Field<WorkflowSettings>(form, "workflow").Sounds = appOn; Call(form, "UpdateButtons");
+                    RenderSnapshot(form, "ljud-lasare-" + readerOn + "-app-" + appOn);
+                }
+            }
+        }
         private sealed class FakeReader
         {
             internal byte Board = 6; internal int Writes; internal bool BadSettings;
+            internal int SoundFailure = -1;
+            internal byte[] SoundTable = Enumerable.Range(0, 130).Select(i => (byte)(i < 39 ? 0 : 165)).ToArray();
             private bool present;
             private readonly System.Collections.Generic.Dictionary<string, Tlv> settings = new System.Collections.Generic.Dictionary<string, Tlv>();
             internal FakeReader()
             {
+                for (int sequence = 0; sequence < 3; sequence++) { SoundTable[sequence * 13] = 17; SoundTable[sequence * 13 + 1] = 2; SoundTable[sequence * 13 + 2] = 1; SoundTable[sequence * 13 + 3] = 1; }
                 foreach (PollSetting poll in ReaderClient.Polls) settings.Add(poll.Oid, new Tlv { Tag = 1, Value = new byte[] { 255 } });
                 settings.Add(ReaderClient.AskDataOid, new Tlv { Tag = 4, Value = new byte[8] });
             }
@@ -573,15 +622,24 @@
                 if (command == "FFCA000000") return Codec.Hex("010203049000");
                 if (command == "FF70076B07A005A10380010400") return Codec.Hex("9D0803060001020304059000");
                 if (command == "FF6800010101") return Codec.Hex("9000");
-                byte[] cmd = Codec.Hex(command); int p = 8; Tlv oid = Codec.ReadTlv(cmd, ref p); Tlv value = Codec.ReadTlv(cmd, ref p);
+                byte[] cmd = Codec.Hex(command);
+                if (cmd[2] == 3) {
+                    if (command == "FF680380") return Codec.Hex("9000");
+                    int sequence = cmd[3] - 0x40; if (sequence < 0 || sequence > 2 || cmd.Length != 18 || cmd[4] != 13) throw new InvalidOperationException("Unexpected sound write");
+                    Writes++; Array.Copy(cmd, 5, SoundTable, sequence * 13, 13);
+                    if (SoundFailure == sequence) { SoundFailure = -1; throw new IOException("Simulated lost sound response"); }
+                    return Codec.Hex("9000");
+                }
+                int p = 8; Tlv oid = Codec.ReadTlv(cmd, ref p); Tlv value = Codec.ReadTlv(cmd, ref p);
                 string key = Codec.ToHex(oid.Value);
                 if (cmd[5] == 2) { Writes++; settings[key] = value; }
                 else if (key == "010200") value = new Tlv { Tag = 2, Value = new byte[] { Board } };
                 else if (key == "010100") value = new Tlv { Tag = 2, Value = Codec.Hex("01050176") };
                 else if (key == "010A00") value = new Tlv { Tag = 4, Value = Enumerable.Repeat((byte)0xAA, 16).ToArray() };
+                else if (key == ReaderClient.SoundOid) value = new Tlv { Tag = 4, Value = SoundTable };
                 else if (key == "0302010300") value = new Tlv { Tag = 4, Value = present ? Codec.Hex("3B00") : new byte[0] };
                 else value = BadSettings ? new Tlv { Tag = 4, Value = new byte[0] } : settings[key];
-                return Codec.Hex("0300000D" + oid.Value.Length.ToString("X2") + key + value.Tag.ToString("X2") + value.Value.Length.ToString("X2") + Codec.ToHex(value.Value) + "9000");
+                return Codec.Hex("0300000D" + oid.Value.Length.ToString("X2") + key + value.Tag.ToString("X2") + (value.Value.Length >= 128 ? "81" : "") + value.Value.Length.ToString("X2") + Codec.ToHex(value.Value) + "9000");
             }
         }
         private static void Collect() { GC.Collect(); GC.WaitForPendingFinalizers(); GC.Collect(); }
