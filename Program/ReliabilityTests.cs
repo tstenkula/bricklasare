@@ -457,6 +457,19 @@
                     RenderSnapshot(dialog, "it-settings-contained");
                 }
             }
+            using (Bitmap wide = new Bitmap(320, 64))
+            {
+                using (Graphics graphics = Graphics.FromImage(wide)) { graphics.Clear(Color.Transparent); graphics.FillRectangle(Brushes.Navy, 0, 0, 320, 64); }
+                AppearanceFiles.Save(directory, settings, wide);
+            }
+            using (ReceptionForm form = ReaderPreview(directory, FormatProfiles.Combo))
+            {
+                form.Show(); Application.DoEvents(); PictureBox logo = Field<PictureBox>(form, "logo");
+                Check(logo.Width > logo.Height && Math.Abs((double)logo.Width / logo.Height - 5) < 0.1,
+                    "Wide rectangular logo keeps its aspect ratio without stretching or cropping");
+                Check(logo.Left == Field<Label>(form, "brand").Left, "Wide logo shares the branding left edge");
+                RenderSnapshot(form, "branding-wide-logo");
+            }
             using (AppearanceDialog dialog = new AppearanceDialog(directory))
             {
                 Rectangle work = Screen.PrimaryScreen.WorkingArea;
