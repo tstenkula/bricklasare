@@ -11,11 +11,13 @@ on:
           - all
           - historical
           - stable-3.6.1
+          - stable-3.6.2
   pull_request:
     paths:
       - tools/test-published-update.ps1
       - tools/test-published-mac-update.py
       - tools/fixtures/published-stable-3.6.1.feed
+      - tools/fixtures/published-stable-3.6.2.feed
       - .github/workflows/published-update-acceptance.yml
 
 permissions:
@@ -34,7 +36,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        case: ${{ fromJSON(inputs.case == 'historical' && '["historical"]' || inputs.case == 'stable-3.6.1' && '["stable-3.6.1"]' || '["historical","stable-3.6.1"]') }}
+        case: ${{ fromJSON(inputs.case == 'historical' && '["historical"]' || inputs.case == 'stable-3.6.1' && '["stable-3.6.1"]' || inputs.case == 'stable-3.6.2' && '["stable-3.6.2"]' || '["historical","stable-3.6.1","stable-3.6.2"]') }}
     steps:
       - name: Check out acceptance tools
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -62,7 +64,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        case: ${{ fromJSON(inputs.case == 'historical' && '["historical"]' || inputs.case == 'stable-3.6.1' && '["stable-3.6.1"]' || '["historical","stable-3.6.1"]') }}
+        case: ${{ fromJSON(inputs.case == 'historical' && '["historical"]' || inputs.case == 'stable-3.6.1' && '["stable-3.6.1"]' || inputs.case == 'stable-3.6.2' && '["stable-3.6.2"]' || '["historical","stable-3.6.1","stable-3.6.2"]') }}
     steps:
       - name: Check out acceptance tools
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1

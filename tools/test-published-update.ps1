@@ -3,7 +3,7 @@
 param(
     [switch]$InstallOnDisposableRunner,
     [string]$OutputDirectory,
-    [ValidateSet('historical', 'stable-3.6.1')][string]$Case = 'historical'
+    [ValidateSet('historical', 'stable-3.6.1', 'stable-3.6.2')][string]$Case = 'historical'
 )
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
@@ -33,6 +33,18 @@ if ($Case -ceq 'stable-3.6.1') {
     $newHash = $null; $feedHash = $null
     $fixture = Join-Path $PSScriptRoot 'fixtures\published-stable-3.6.1.feed'
     if (-not (Test-Path -LiteralPath $fixture -PathType Leaf)) { throw 'The reviewed signed 3.6.1 stable fixture is required.' }
+    $fixtureFile = Get-Item -LiteralPath $fixture -Force
+    if ($fixtureFile.Length -lt 1 -or $fixtureFile.Length -gt 65536 -or ($fixtureFile.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) { throw 'Invalid stable fixture file.' }
+}
+if ($Case -ceq 'stable-3.6.2') {
+    $sourceVersion = '3.6.1'; $targetVersion = '3.6.2'; $channel = 'stable'
+    $sourceTag = 'v3.6.1'; $targetTag = 'v3.6.2'
+    $oldSize = 218479; $newSize = $null
+    $oldHash = '74f1ffedbe977a90eda73652135edc06f9912e577286dcb435b846454589e79f'
+    $helperHash = '90bfb42a511ed30384bc811498fe7cc09e2a91f86d53c29b8427e5bdcef67d51'
+    $newHash = $null; $feedHash = $null
+    $fixture = Join-Path $PSScriptRoot 'fixtures\published-stable-3.6.2.feed'
+    if (-not (Test-Path -LiteralPath $fixture -PathType Leaf)) { throw 'The reviewed signed 3.6.2 stable fixture is required.' }
     $fixtureFile = Get-Item -LiteralPath $fixture -Force
     if ($fixtureFile.Length -lt 1 -or $fixtureFile.Length -gt 65536 -or ($fixtureFile.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) { throw 'Invalid stable fixture file.' }
 }
@@ -193,6 +205,7 @@ try {
             'formatval.json' = '{"Mode":"Kombi","RcoChip":"M"}'
             'utseende.json' = '{"Schema":1,"Organization":"","Subtitle":"","AccentHex":"#003B55","LogoFile":""}'
             'arbetsflode.json' = ('{"Copy":0,"Sounds":false,"Channel":"' + $channel + '","AutoCheck":false}')
+            'lasarljud-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA.json' = '{"Schema":1,"ReaderId":"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA","Firmware":"00000000","Original":"000000000000000000000000000000000000000000000000000000000000000000000000000000"}'
             'acceptance-sentinel.txt' = 'Synthetic acceptance settings; no reader or card data.'
         }
         foreach ($name in $sentinels.Keys) { [IO.File]::WriteAllText((Join-Path $data $name), $sentinels[$name], $utf8) }

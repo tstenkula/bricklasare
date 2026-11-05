@@ -29,7 +29,7 @@ Detta är **paketverifiering**, inte Windows Authenticode eller Apple Developer 
 2. Signera kanalfilen lokalt med `tools/release.py`. Exempel:
 
    ```sh
-   python3 tools/release.py --key /secure/path/update-signing.pem --channel stable --version 3.6.1 --tag v3.6.1 --windows dist/Bricklasaren-3.6.1-Windows.zip --mac dist/Bricklasaren-3.6.1-macOS-AppleSilicon.zip --output Updates/stable.feed
+   python3 tools/release.py --key /secure/path/update-signing.pem --channel stable --version 3.6.2 --tag v3.6.2 --windows dist/Bricklasaren-3.6.2-Windows.zip --mac dist/Bricklasaren-3.6.2-macOS-AppleSilicon.zip --output Updates/stable.feed
    ```
 
 3. Kontrollera att arkivens hash stämmer mot GitHub, uppdatera källfilernas kontrollsummor och skicka kanalfilen genom granskning till `main`. Flytta inte en befintlig release till annat innehåll efter publicering.
@@ -39,6 +39,6 @@ Nyckeln skapades lokalt utanför arbetsmappen och ska säkerhetskopieras privat 
 
 ## Prov av publicerade paket
 
-GitHub Actions-flödet **Published update acceptance** provar två verkliga uppdateringar: 3.5.2 → 3.6.0 (förhandskanalen) och 3.6.0 → 3.6.1 (stabil). Varje fall körs separat på Windows och Mac med den tidigare publicerade installationshjälpen. Flödet körs manuellt eller vid ändringar i provets egna filer på en gren i detta repo. Historisk kanalfil och äldre paket är låsta till sina kontrollerade versioner. Det stabila fallet använder den ursprungliga signerade 3.6.1-filen som testdata, så att ett senare versionssläpp inte ändrar provet.
+GitHub Actions-flödet **Published update acceptance** provar tre verkliga uppdateringar: 3.5.2 → 3.6.0 (förhandskanalen), 3.6.0 → 3.6.1 och 3.6.1 → 3.6.2 (stabil). Varje fall körs separat på Windows och Mac med den tidigare publicerade installationshjälpen. Flödet körs manuellt eller vid ändringar i provets egna filer på en gren i detta repo. Historisk kanalfil och äldre paket är låsta till sina kontrollerade versioner. De stabila fallen använder de ursprungliga signerade 3.6.1- och 3.6.2-filerna som testdata, så att ett senare versionssläpp inte ändrar provet.
 
 Provet använder tillfälliga Windows- och Apple Silicon-datorer hos GitHub, syntetiska inställningar och inga läsare. Det avvisar befintliga användardata och körs inte på personliga eller egna servrar. Installation, bevarade inställningar och tidigare programmapp kontrolleras; Mac kontrollerar även normal omstart. Hämtningen startas av provverktyget, så detta är inte ett klickprov av hela uppdateringsdialogen. Det ersätter inte hårdvaruproven i [IT/Verifiering.txt](../IT/Verifiering.txt).
