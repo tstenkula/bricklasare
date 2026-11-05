@@ -178,22 +178,22 @@ final class SoundButton: NSButton {
     setButtonType(.momentaryPushIn)
     isBordered = false
     translatesAutoresizingMaskIntoConstraints = false
-    widthAnchor.constraint(equalToConstant: 48).isActive = true
-    heightAnchor.constraint(equalToConstant: 48).isActive = true
+    widthAnchor.constraint(equalToConstant: 44).isActive = true
+    heightAnchor.constraint(equalToConstant: 44).isActive = true
   }
   required init?(coder: NSCoder) { fatalError("init(coder:) is not supported") }
   @objc private func clicked() { actionBlock?() }
   override func draw(_ dirtyRect: NSRect) {
     (isHighlighted ? Theme.mix(.white, .black, 0.07) : .white).setFill()
     NSBezierPath(roundedRect: bounds, xRadius: 7, yRadius: 7).fill()
-    // Fixed 48pt button: 5pt above a 22pt icon, 5pt before the 12pt text line.
+    // Fixed 44pt button: 4pt above a 20pt icon, 4pt before the 12pt text line.
     // Draw the original stock image; changing state never changes its layout slot.
     let icon = muted ? tintedOff : tintedOn
-    icon?.draw(in: NSRect(x: (bounds.width - 22) / 2, y: 5, width: 22, height: 22),
+    icon?.draw(in: NSRect(x: (bounds.width - 20) / 2, y: 4, width: 20, height: 20),
                from: .zero, operation: .sourceOver, fraction: isEnabled ? 1 : 0.45,
                respectFlipped: true, hints: nil)
     let paragraph = NSMutableParagraphStyle(); paragraph.alignment = .center
-    title.draw(in: NSRect(x: 0, y: 32, width: bounds.width, height: 12),
+    title.draw(in: NSRect(x: 0, y: 28, width: bounds.width, height: 12),
                withAttributes: [.font: font ?? NSFont.systemFont(ofSize: 9),
                                 .foregroundColor: isEnabled ? color : Theme.muted,
                                 .paragraphStyle: paragraph])

@@ -1,4 +1,4 @@
-﻿// Reception v3.6.3 (PowerShell). Reader protocol remains in OmnikeyCore.cs.
+﻿// Reception v3.6.4 (PowerShell). Reader protocol remains in OmnikeyCore.cs.
 namespace Tobtech.OmnikeyRco
 {
     using System;
@@ -342,8 +342,8 @@ namespace Tobtech.OmnikeyRco
         {
             lock (errorGate)
             {
-                return "BRICKLÄSAREN RECEPTION 3.6.3 – POWERSHELL\r\n" +
-                    "Läsarmotor: v3.6.3, standardformat med frivillig lokal IT-kalibrering.\r\n" +
+                return "BRICKLÄSAREN RECEPTION 3.6.4 – POWERSHELL\r\n" +
+                    "Läsarmotor: v3.6.4, standardformat med frivillig lokal IT-kalibrering.\r\n" +
                     "Rapport skapad: " + DateTime.Now.ToString("s") + "\r\n" +
                     "Diagnostik: anslutning 1.\r\n" +
                     "Inga skannade nummer, råsvar, sökvägar eller undantagsmeddelanden ingår.\r\n\r\n" +
@@ -452,7 +452,7 @@ namespace Tobtech.OmnikeyRco
         {
             get
             {
-                return "BRICKLÄSAREN 3.6.3\r\n\r\n" +
+                return "BRICKLÄSAREN 3.6.4\r\n\r\n" +
                     "Starta med " + ReceptionFiles.LauncherName + ".\r\n" +
                     "Första gången väljer du vilket passersystem du ska läsa för.\r\n" +
                     "Valet sparas direkt och används automatiskt vid nästa start.\r\n" +

@@ -147,7 +147,7 @@
         private readonly Image onIcon, offIcon;
         internal SoundButton(bool reader)
         {
-            ReaderIcon = reader; Size = new Size(48, 48); MinimumSize = Size; MaximumSize = Size;
+            ReaderIcon = reader; Size = new Size(44, 44); MinimumSize = Size; MaximumSize = Size;
             FlatStyle = FlatStyle.Flat; FlatAppearance.BorderSize = 0; Cursor = Cursors.Hand;
             BackColor = Color.White; Margin = new Padding(0); TabStop = true;
             SetStyle(ControlStyles.UserPaint | ControlStyles.OptimizedDoubleBuffer, true);
@@ -168,7 +168,7 @@
             e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
             e.Graphics.Clear(Focused || ClientRectangle.Contains(PointToClient(Control.MousePosition)) ? Ui.AccentLight : Color.White);
             float scale = e.Graphics.DpiX / 96F;
-            int size = (int)Math.Round(22 * scale), top = (int)Math.Round(5 * scale);
+            int size = (int)Math.Round(20 * scale), top = (int)Math.Round(4 * scale);
             Rectangle iconArea = new Rectangle((Width - size) / 2, top, size, size);
             Color ink = Enabled ? Ui.Accent : Ui.Muted;
             Image icon = Muted ? offIcon : onIcon;

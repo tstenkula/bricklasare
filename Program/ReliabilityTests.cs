@@ -33,6 +33,7 @@
             {
                 Application.EnableVisualStyles(); Application.SetCompatibleTextRenderingDefault(false);
                 count += ReaderNetworkTests.Run();
+                ExerciseHeaderLayout(Path.Combine(directory, "header-layout"));
                 ExerciseConnectionDiagnostics(Path.Combine(directory, "connection-diagnostics"));
                 ExerciseReaderSound(Path.Combine(directory, "reader-sound"));
                 ExerciseUpdates(directory);
@@ -413,6 +414,57 @@
             }
             WorkflowSettings saved = WorkflowSettings.Load(directory);
             Check(saved.Copy == 3 && saved.Channel == "preview", "Workflow save retains the chosen values");
+        }
+        private static void ExerciseHeaderLayout(string directory)
+        {
+            foreach (Rectangle work in new[] { new Rectangle(0, 0, 1280, 680), new Rectangle(-1280, 32, 1280, 688), new Rectangle(1920, -900, 1600, 860) })
+            {
+                foreach (Rectangle initial in new[] { new Rectangle(work.Left + 400, work.Bottom - 180, 610, 1050),
+                    new Rectangle(work.Left - 200, work.Top - 120, 915, 1530) })
+                {
+                    Rectangle fit = Ui.FitWindowBounds(initial, work);
+                    Check(work.Contains(fit) && fit.Width > 0 && fit.Height > 0, "Expanded/scaled settings remain inside taskbar-excluded working area, including negative monitor coordinates");
+                }
+            }
+            Directory.CreateDirectory(directory); AppearanceSettings settings = AppearanceSettings.Default();
+            settings.Organization = "Testorganisation"; settings.Subtitle = "Entré nord";
+            using (Bitmap square = new Bitmap(128, 128))
+            {
+                using (Graphics graphics = Graphics.FromImage(square)) { graphics.Clear(Color.Transparent); graphics.FillRectangle(Brushes.Navy, 4, 4, 120, 120); }
+                AppearanceFiles.Save(directory, settings, square);
+            }
+            using (ReceptionForm form = ReaderPreview(directory, FormatProfiles.Combo))
+            {
+                form.Show(); Application.DoEvents();
+                Label title = Field<Label>(form, "brand"), subtitle = Field<Label>(form, "brandSubtitle");
+                PictureBox logo = Field<PictureBox>(form, "logo");
+                Check(title.Font.SizeInPoints > subtitle.Font.SizeInPoints, "Organization title stays larger than its subtitle");
+                Check(logo.Width == logo.Height && logo.Left == title.Left && title.Left == subtitle.Left, "Square logo has no centered gutter and aligns with both branding labels");
+                Button help = Field<Button>(form, "help"); SoundButton app = Field<SoundButton>(form, "appSoundButton"), hardware = Field<SoundButton>(form, "readerSoundButton");
+                Rectangle h = help.RectangleToScreen(help.ClientRectangle), a = app.RectangleToScreen(app.ClientRectangle), r = hardware.RectangleToScreen(hardware.ClientRectangle);
+                Check(h.Top == a.Top && a.Top == r.Top && help.Height == app.Height && app.Height == hardware.Height, "All three header controls share height and top edge");
+                Check(h.Left - a.Right >= 10, "Sound controls keep a visible gap before Help");
+                RenderSnapshot(form, "branding-compact-aligned");
+                Rectangle work = Screen.FromControl(form).WorkingArea;
+                using (ReceptionHelp dialog = new ReceptionHelp("192.168.63.99", null, FormatProfiles.Combo, "M", false))
+                {
+                    dialog.StartPosition = FormStartPosition.Manual; dialog.Location = new Point(work.Right - 650, work.Bottom - 200);
+                    dialog.Show(form); Application.DoEvents();
+                    ((Button)Find(dialog, "IT-inställningar", false)).PerformClick(); Application.DoEvents();
+                    Check(work.Contains(dialog.Bounds), "Expanding IT settings near the bottom moves the complete window into view");
+                    Check(dialog.VerticalScroll.Visible, "Tall IT settings scroll inside the available working area");
+                    RenderSnapshot(dialog, "it-settings-contained");
+                }
+            }
+            using (AppearanceDialog dialog = new AppearanceDialog(directory))
+            {
+                Rectangle work = Screen.PrimaryScreen.WorkingArea;
+                dialog.StartPosition = FormStartPosition.Manual; dialog.Location = new Point(work.Right - 300, work.Bottom - 120);
+                dialog.Show(); Application.DoEvents();
+                Check(Screen.FromControl(dialog).WorkingArea.Contains(dialog.Bounds), "Appearance editor clamps both size and position on first open");
+                Check(Inside(dialog, (Button)Find(dialog, "Spara utseende", false)), "Appearance save action stays visible after fitting");
+                RenderSnapshot(dialog, "branding-settings-contained");
+            }
         }
         private static void ExerciseDisplayLogo(string directory)
         {

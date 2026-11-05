@@ -14,9 +14,9 @@ namespace Tobtech.OmnikeyRco
         private readonly TextBox color = new TextBox { Width = 120, MaxLength = 7, AccessibleName = "Accentfärg i hexadecimal form" };
         private readonly ComboBox presets = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Width = 240, DropDownWidth = 280, AccessibleName = "Färgtema" };
         private readonly Panel preview = new Panel { AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, MinimumSize = new Size(0, 135), Dock = DockStyle.Top, Padding = new Padding(14) };
-        private readonly PictureBox logo = new PictureBox { Size = new Size(150, 55), SizeMode = PictureBoxSizeMode.Zoom, Dock = DockStyle.Top, AccessibleName = "Förhandsvisning av logotyp" };
-        private readonly Label titlePreview = Ui.Label("", 15F, true);
-        private readonly Label subtitlePreview = Ui.Label("", 10F, false);
+        private readonly PictureBox logo = new PictureBox { Size = new Size(150, 55), MaximumSize = new Size(150, 55), SizeMode = PictureBoxSizeMode.Zoom, AccessibleName = "Förhandsvisning av logotyp" };
+        private readonly Label titlePreview = Ui.Label("", 12F, true);
+        private readonly Label subtitlePreview = Ui.Label("", 9.5F, false);
         private readonly Label colorError = Ui.Label("", 10F, false);
         private readonly Button previewButton = Ui.Button("Läs bricka", true);
         private readonly Button save = Ui.Button("Spara utseende", true);
@@ -105,8 +105,7 @@ namespace Tobtech.OmnikeyRco
         }
         private void FitToScreen()
         {
-            Rectangle work = Screen.FromControl(this).WorkingArea;
-            Height = Math.Min(Height, work.Height - 30);
+            Ui.FitToScreen(this);
         }
         private void SyncPreset()
         {
@@ -117,7 +116,7 @@ namespace Tobtech.OmnikeyRco
         {
             Image previous = logo.Image; logo.Image = next;
             if (previous != null) previous.Dispose();
-            logo.Visible = next != null;
+            logo.Visible = next != null; Ui.FitLogo(logo);
         }
         private void UpdatePreview()
         {
