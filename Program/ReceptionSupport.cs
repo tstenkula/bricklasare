@@ -481,7 +481,9 @@ namespace Tobtech.OmnikeyRco
             check(packageFiles.All(delegate(string p) {
                 string ext = Path.GetExtension(p).ToLowerInvariant();
                 bool sourceOrDocument = ext == ".cmd" || ext == ".ps1" || ext == ".cs" || ext == ".txt" || ext == ".md";
-                return sourceOrDocument || p == "Program/Bricklasaren.ico";
+                return sourceOrDocument || p == "Program/Bricklasaren.ico" ||
+                    p == "Assets/Lucide/volume-2.png" || p == "Assets/Lucide/volume-off.png" ||
+                    p == "Assets/Lucide/volume-2.svg" || p == "Assets/Lucide/volume-off.svg";
             }));
             check(packageFiles.All(delegate(string p) { return !Path.IsPathRooted(p) && !p.Contains(".."); }));
             // A caller cannot change the allow-list used by the next export.

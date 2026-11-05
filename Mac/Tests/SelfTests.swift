@@ -54,8 +54,14 @@ final class MockReader: ReaderTransport {
     }
     guard var t = settings[oid] else { throw fail("SIMULATED_OID", "Unexpected OID") }
     if changingIdentity && oid == "010A00" { t.value = Array(repeating: 42, count: 16) }
-    return [3, 0, 0, 13, UInt8(length)] + (try Codec.hex(oid)) + [t.tag] + (t.value.count >= 128 ? [0x81, UInt8(t.value.count)] : [UInt8(t.value.count)])
-      + t.value + [0x90, 0]
+    var response: [UInt8] = [3, 0, 0, 13, UInt8(length)]
+    response += try Codec.hex(oid)
+    response.append(t.tag)
+    if t.value.count >= 128 { response.append(0x81) }
+    response.append(UInt8(t.value.count))
+    response += t.value
+    response += [0x90, 0]
+    return response
   }
 }
 struct SelfTests {
