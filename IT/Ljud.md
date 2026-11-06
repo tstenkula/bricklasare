@@ -55,3 +55,15 @@ En fungerande APDU-anslutning i appen bevisar inte att webbgränssnittets GET-re
 Kontroll 2 från fysisk läsare visar fungerande USB-anslutning och HTTP 200 med 433 byte från startsidan. Den manuellt tillhandahållna HTML-strukturen innehåller `webserver.js` följt av frågetecken och en 32 tecken lång hexmarkör. Det generella förbudet mot parametrar gjorde att skriptet hoppades över och gav NO_SCRIPTS.
 
 Referensupplösningen tar nu bort just denna form av cachemarkör för .js-filer innan den ordinarie kontrollen av värd, port och statisk sökväg. Varken markören eller andra parametrar skickas till läsaren. Frågeparametrar med nyckel/värde, andra filtyper, otillåtna mål och felaktiga markörer avvisas fortfarande. En reproduktion av sidans struktur med syntetisk markör verifierar att den centrala skriptfilen nu efterfrågas. Den faktiska markören och övriga lokala uppgifter har inte lagts i källkoden. Fysisk hämtning av skriptet återstår att prova.
+
+### Insamlingsverktyg 4: skriptets HTTP-innehåll
+
+Fysisk kontroll 3 bekräftar att även `/webserver.js` svarar HTTP 200, men verktyget avvisar innehållet före TEXT_BYTES. Den exakta felorsaken för en extra fil tappades bort och ersattes i slutrapporten av NO_SCRIPTS. Varje resursfel får nu en fast kod i både rapport och kontrollfil. Numerisk Content-Length och en känd Content-Encoding-klass sparas också, utan övriga header-värden.
+
+Verktyget hanterar gzip och RFC1950-deflate med storleksbegränsad uppackning. CRC32/ISIZE respektive Adler32 kontrolleras även uttryckligen, och ogiltiga eller avklippta data avvisas. Rå deflate utan zlib-ram och okända eller staplade kodningar avvisas. Uppackad binärdata sparas inte som skript.
+
+Den fristående verktygsgränsen blir 2 MiB per fil i både överförd och uppackad form; insamlingens totala gräns för behandlat underlag är fortsatt 2 MiB. Appens gräns är fortsatt 16 KiB och dess läsarsvar får fortfarande inte vara HTTP-komprimerade. Den gemensamma privata HTTP-hjälparens tillåtna maxparameter höjs för verktyget; appens anrop och gräns ändras inte.
+
+Större eller komprimerat skript är möjliga orsaker till det fysiska stoppet, ännu inte bekräftade sådana. Den nya versionen och de säkra felkoderna ska hantera dessa fall och göra ett kvarvarande fel tydligt utan fler gissningar. Fysisk verifiering av version 4 återstår när läsaren åter finns tillgänglig.
+
+Formatunderlag: RFC1950 (https://www.rfc-editor.org/rfc/rfc1950) och RFC1952 (https://www.rfc-editor.org/rfc/rfc1952). Framework DeflateStream använder rå RFC1951, varför zlib-ram och Adler32 hanteras separat i verktyget (Microsofts referenskod: https://github.com/microsoft/referencesource/blob/main/System/InternalApis/NDP_FX/inc/ZLibNative.cs). Tester använder oberoende Python-genererade vektorer, en expanderande testfil och korrupta/avklippta kontroller. Ingen kod från läsaren körs.

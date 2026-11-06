@@ -6,7 +6,7 @@ $paths = @('Program/ReaderNetwork.cs', 'tools/reader-ui-inspection/ReaderWebFile
 $source = $paths | ForEach-Object { [IO.File]::ReadAllText((Join-Path $root $_)) }
 $parameters = New-Object CodeDom.Compiler.CompilerParameters
 $parameters.CompilerOptions = '/langversion:5 /warnaserror'
-foreach ($assembly in @('System.dll','System.Core.dll','System.Management.dll')) { [void]$parameters.ReferencedAssemblies.Add($assembly) }
+foreach ($assembly in @('System.dll','System.Core.dll','System.Management.dll','System.IO.Compression.dll')) { [void]$parameters.ReferencedAssemblies.Add($assembly) }
 Add-Type -TypeDefinition ($source -join "`r`n") -CompilerParameters $parameters -Language CSharp
 [void][Tobtech.OmnikeyRco.InspectionTests]::Run()
 foreach ($path in @('tools/reader-ui-inspection/Samla-ljudunderlag.ps1', 'tools/build-reader-ui-inspection.ps1')) {

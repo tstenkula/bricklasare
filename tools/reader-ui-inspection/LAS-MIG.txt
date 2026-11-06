@@ -1,4 +1,4 @@
-BRICKLÄSAREN – UNDERLAG FÖR GEN1-LJUD, VERSION 3
+BRICKLÄSAREN – UNDERLAG FÖR GEN1-LJUD, VERSION 4
 
 Detta separata verktyg samlar kod från OMNIKEY 5427 CK:s inbyggda
 webbgränssnitt för att kunna undersöka hur Gen1 läser ljudinställningar.
@@ -47,7 +47,7 @@ köra Samla-ljudunderlag.ps1 -Address följt av läsarens lokala IPv4-adress.
 Administratorbehörighet behövs inte. Verktyget ändrar inte Windows
 säkerhetsinställningar eller PowerShell-policy.
 
-Insamlingen är begränsad till 32 förfrågningar, 256 KiB per fil, 2 MiB
+Insamlingen är begränsad till 32 förfrågningar, 2 MiB per fil (både överfört och uppackat), 2 MiB
 totalt och 90 sekunder, med avbrottskontroll efter en pågående förfrågan. Om något
 misslyckas kan delunderlag ligga kvar i den lokala mappen.
 
@@ -56,3 +56,11 @@ webbläsare. Underlaget kan därför vara ofullständigt. Om inga skript
 kan hämtas behövs webbgränssnittets kod på annat sätt.
 Korrekt hämtning och Gen1-ljudstyrning behöver verifieras med fysisk
 läsare. Tester av detta verktyg använder syntetiska svar utan hårdvara.
+
+Version 4 hanterar större skript samt gzip och deflate med zlib-ram.
+Kontrollsummor kontrolleras och uppackningen stoppas vid storleksgränsen.
+Det totala underlaget begränsas fortfarande till 2 MiB.
+Kontrollrapporten visar både överförd och uppackad storlek och känd
+komprimeringsklass. Fel i varje extra fil sparas med fast felkod även
+om slutresultatet blir att inga skript hittades. Inga godtyckliga
+header-värden eller undantagsmeddelanden skrivs i rapporten.

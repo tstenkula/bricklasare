@@ -4,6 +4,7 @@ namespace Tobtech.OmnikeyRco
     using System;
     using System.Diagnostics;
     using System.IO;
+    using System.IO.Compression;
     using System.Net;
     using System.Net.Sockets;
     using System.Text;
@@ -11,6 +12,73 @@ namespace Tobtech.OmnikeyRco
 
     internal static partial class ReaderNetwork
     {
+        internal const int MaxPublicFile = 2097152;
+        private static uint Checksum(byte[] bytes, bool crc)
+        {
+            if (!crc)
+            {
+                uint a = 1, b = 0;
+                foreach (byte value in bytes) { a = (a + value) % 65521; b = (b + a) % 65521; }
+                return (b << 16) | a;
+            }
+            uint result = 0xFFFFFFFF;
+            foreach (byte value in bytes)
+            {
+                result ^= value;
+                for (int bit = 0; bit < 8; bit++) result = (result & 1) != 0 ? (result >> 1) ^ 0xEDB88320u : result >> 1;
+            }
+            return ~result;
+        }
+        private static uint Footer(byte[] bytes, int offset, bool little)
+        {
+            uint result = 0;
+            for (int i = 0; i < 4; i++) result = (result << 8) | bytes[offset + (little ? 3 - i : i)];
+            return result;
+        }
+        internal static byte[] DecodePublicBody(byte[] bytes, string encoding, Func<bool> expired)
+        {
+            if (bytes == null || bytes.Length > MaxPublicFile) throw new InvalidDataException("För stort läsarsvar.");
+            bool gzip = String.Equals(encoding, "gzip", StringComparison.OrdinalIgnoreCase);
+            bool deflate = String.Equals(encoding, "deflate", StringComparison.OrdinalIgnoreCase);
+            if (!gzip && !deflate)
+            {
+                if (encoding != null && !String.Equals(encoding, "identity", StringComparison.OrdinalIgnoreCase))
+                    throw new InvalidDataException("Oväntad HTTP-kodning från läsaren.");
+                return ValidatePublicText(bytes);
+            }
+            bool zlib = deflate && bytes.Length >= 2 && (bytes[0] & 15) == 8 && bytes[0] >> 4 <= 7 && (bytes[0] * 256 + bytes[1]) % 31 == 0;
+            if ((gzip && (bytes.Length < 18 || bytes[0] != 31 || bytes[1] != 139 || bytes[2] != 8 || (bytes[3] & 224) != 0)) ||
+                (deflate && (!zlib || bytes.Length < 6 || (bytes[1] & 32) != 0))) throw new InvalidDataException("Ogiltig komprimerad läsarfil.");
+            byte[] result;
+            try
+            {
+                // Framework DeflateStream consumes RFC1951. HTTP's RFC1950 wrapper
+                // is removed explicitly, and its Adler-32 is verified below.
+                using (MemoryStream input = new MemoryStream(bytes, zlib ? 2 : 0, bytes.Length - (zlib ? 6 : 0), false))
+                using (Stream decoder = gzip ? (Stream)new GZipStream(input, CompressionMode.Decompress) : new DeflateStream(input, CompressionMode.Decompress))
+                using (MemoryStream output = new MemoryStream())
+                {
+                    byte[] buffer = new byte[4096]; int count;
+                    while ((count = decoder.Read(buffer, 0, buffer.Length)) != 0)
+                    {
+                        if (expired()) throw new ReaderNetworkDisconnectedException("Läsaren svarade för långsamt.");
+                        if (count > MaxPublicFile - output.Length) throw new InvalidDataException("Uppackad läsarfil är för stor.");
+                        output.Write(buffer, 0, count);
+                    }
+                    result = output.ToArray();
+                }
+            }
+            catch (InvalidDataException error)
+            {
+                if (error.Message == "Uppackad läsarfil är för stor.") throw;
+                throw new InvalidDataException("Ogiltig komprimerad läsarfil.", error);
+            }
+            // Check trailers explicitly as older Framework stream implementations
+            // can accept a truncated stream without reporting the missing trailer.
+            if ((gzip && (Footer(bytes, bytes.Length - 8, true) != Checksum(result, true) || Footer(bytes, bytes.Length - 4, true) != result.Length)) ||
+                (zlib && Footer(bytes, bytes.Length - 4, false) != Checksum(result, false))) throw new InvalidDataException("Ogiltig komprimerad läsarfil.");
+            return ValidatePublicText(result);
+        }
         private sealed class HeaderReplay : Stream
         {
             private readonly MemoryStream prefix;
@@ -41,12 +109,32 @@ namespace Tobtech.OmnikeyRco
             int code = Int32.Parse(match.Groups["status"].Value, System.Globalization.CultureInfo.InvariantCulture);
             trace("HTTP_STATUS_" + code);
             StringBuilder header = new StringBuilder(status + "\r\n");
-            string location = null, line;
+            string location = null, line, contentEncoding = null;
             while ((line = Line(input, expired, ref remaining)).Length != 0)
             {
-                header.Append(line).Append("\r\n");
                 int colon = line.IndexOf(':');
                 if (colon <= 0) throw new InvalidDataException("Ogiltigt HTTP-huvud.");
+                string name = line.Substring(0, colon), value = line.Substring(colon + 1).Trim();
+                if (String.Equals(name, "Content-Length", StringComparison.OrdinalIgnoreCase))
+                {
+                    uint size;
+                    trace(UInt32.TryParse(value, System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out size) ?
+                        "HTTP_LENGTH_" + size : "HTTP_LENGTH_INVALID");
+                }
+                if (String.Equals(name, "Content-Encoding", StringComparison.OrdinalIgnoreCase))
+                {
+                    if (contentEncoding != null) throw new InvalidDataException("Dubbelt HTTP-huvud.");
+                    contentEncoding = value;
+                    trace("HTTP_ENCODING_" + (String.Equals(value, "gzip", StringComparison.OrdinalIgnoreCase) ? "GZIP" :
+                        String.Equals(value, "deflate", StringComparison.OrdinalIgnoreCase) ? "DEFLATE" :
+                        String.Equals(value, "identity", StringComparison.OrdinalIgnoreCase) ? "IDENTITY" : "OTHER"));
+                    if (!String.Equals(value, "gzip", StringComparison.OrdinalIgnoreCase) && !String.Equals(value, "deflate", StringComparison.OrdinalIgnoreCase) &&
+                        !String.Equals(value, "identity", StringComparison.OrdinalIgnoreCase)) throw new InvalidDataException("Oväntad HTTP-kodning från läsaren.");
+                    // The original Content-Length/chunk framing still describes the
+                    // encoded bytes. Only this standalone tool decodes their content.
+                    header.Append("Content-Encoding: identity\r\n");
+                }
+                else header.Append(line).Append("\r\n");
                 if (String.Equals(line.Substring(0, colon), "Location", StringComparison.OrdinalIgnoreCase))
                 {
                     if (location != null) throw new InvalidDataException("Dubbelt omdirigeringsmål.");
@@ -64,7 +152,9 @@ namespace Tobtech.OmnikeyRco
             header.Append("\r\n");
             using (HeaderReplay replay = new HeaderReplay(Encoding.ASCII.GetBytes(header.ToString()), input))
             {
-                byte[] body = PublicFileResponse(replay, expired);
+                byte[] encoded = ReadResponseBytes(replay, expired, MaxPublicFile);
+                trace("ENCODED_BYTES_" + encoded.Length);
+                byte[] body = DecodePublicBody(encoded, contentEncoding, expired);
                 trace("TEXT_BYTES_" + body.Length);
                 return body;
             }
@@ -83,7 +173,10 @@ namespace Tobtech.OmnikeyRco
         }
         internal static byte[] PublicFileResponse(Stream input, Func<bool> expired)
         {
-            byte[] bytes = ReadResponseBytes(input, expired, 262144);
+            return ValidatePublicText(ReadResponseBytes(input, expired, MaxPublicFile));
+        }
+        private static byte[] ValidatePublicText(byte[] bytes)
+        {
             if (bytes.Length == 0) throw new InvalidDataException("Tom läsarfil.");
             // Files are saved as inert text for inspection, never evaluated as scripts or markup.
             foreach (byte b in bytes)

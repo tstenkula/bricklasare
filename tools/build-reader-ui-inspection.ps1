@@ -16,7 +16,7 @@ try {
     }
     [IO.File]::WriteAllLines((Join-Path $staging 'SHA256SUMS.txt'), $manifest, (New-Object Text.UTF8Encoding($false)))
     $dist = Join-Path $root 'dist'; [void][IO.Directory]::CreateDirectory($dist)
-    $zip = Join-Path $dist 'Bricklasaren-Gen1-ljudunderlag-3-Windows.zip'
+    $zip = Join-Path $dist 'Bricklasaren-Gen1-ljudunderlag-4-Windows.zip'
     if (Test-Path -LiteralPath $zip) { [IO.File]::Delete($zip) }
     Add-Type -AssemblyName System.IO.Compression.FileSystem
     [IO.Compression.ZipFile]::CreateFromDirectory($staging, $zip)

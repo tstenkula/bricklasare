@@ -3,6 +3,7 @@ namespace Tobtech.OmnikeyRco
     using System;
     using System.Collections.Generic;
     using System.IO;
+    using System.IO.Compression;
     using System.Linq;
     using System.Net;
     using System.Net.Sockets;
@@ -23,6 +24,14 @@ namespace Tobtech.OmnikeyRco
         {
             using (MemoryStream stream = new MemoryStream(Bytes(s))) return ReaderNetwork.PublicFileResponse(stream, delegate { return false; });
         }
+        private static byte[] Compress(byte[] source)
+        {
+            using (MemoryStream result = new MemoryStream())
+            {
+                using (GZipStream gzip = new GZipStream(result, CompressionMode.Compress, true)) gzip.Write(source, 0, source.Length);
+                return result.ToArray();
+            }
+        }
         private static string Capture(Dictionary<string, string> files, List<string> fetched, Dictionary<string, byte[]> saved)
         {
             return ReaderSoundInspection.Collect(Address, delegate(string path) {
@@ -34,6 +43,41 @@ namespace Tobtech.OmnikeyRco
         public static int Run()
         {
             count = 0;
+            {
+                // Fixed vectors generated independently with Python zlib/gzip.
+                byte[] plain = Bytes("var light = 1;\n");
+                byte[] gz = Convert.FromBase64String("H4sIAAAAAAAC/ytLLFLIyUzPKFGwVTC05gIAcabIcw8AAAA=");
+                byte[] z = Convert.FromBase64String("eJwrSyxSyMlMzyhRsFUwtOYCACneBHU=");
+                Check(ReaderNetwork.DecodePublicBody(gz, "gzip", delegate { return false; }).SequenceEqual(plain), "Independent gzip vector decoded exactly");
+                Check(ReaderNetwork.DecodePublicBody(z, "deflate", delegate { return false; }).SequenceEqual(plain), "Independent RFC1950 vector decoded with Adler32");
+                Reject(delegate { ReaderNetwork.DecodePublicBody(Convert.FromBase64String("K0ssUsjJTM8oUbBVMLTmAgA="), "deflate", delegate { return false; }); }, "Unframed ambiguous raw deflate is not treated as verified RFC1950 data");
+                foreach (int at in new[] { gz.Length - 8, gz.Length - 1 })
+                {
+                    byte[] bad = (byte[])gz.Clone(); bad[at] ^= 1;
+                    Reject(delegate { ReaderNetwork.DecodePublicBody(bad, "gzip", delegate { return false; }); }, "Gzip checksum and size trailers enforced");
+                }
+                byte[] badZ = (byte[])z.Clone(); badZ[badZ.Length - 1] ^= 1;
+                Reject(delegate { ReaderNetwork.DecodePublicBody(badZ, "deflate", delegate { return false; }); }, "Zlib checksum enforced");
+                Reject(delegate { ReaderNetwork.DecodePublicBody(gz.Take(gz.Length - 4).ToArray(), "gzip", delegate { return false; }); }, "Truncated compressed trailer rejected");
+                Reject(delegate { ReaderNetwork.DecodePublicBody(Bytes("not gzip"), "gzip", delegate { return false; }); }, "Declared compression must match bytes");
+                Reject(delegate { ReaderNetwork.DecodePublicBody(plain, "br", delegate { return false; }); }, "Unknown encoding rejected");
+                Reject(delegate { ReaderNetwork.DecodePublicBody(Compress(new byte[] { 0, 1 }), "gzip", delegate { return false; }); }, "Decoded binary is not saved as script text");
+                Reject(delegate { ReaderNetwork.DecodePublicBody(gz, "gzip", delegate { return true; }); }, "Decompression deadline checked");
+                byte[] bomb = Compress(Enumerable.Repeat((byte)'x', ReaderNetwork.MaxPublicFile + 1).ToArray());
+                Reject(delegate { ReaderNetwork.DecodePublicBody(bomb, "gzip", delegate { return false; }); }, "Small compressed input cannot bypass expanded size cap");
+                byte[] header = Bytes("HTTP/1.1 200 OK\r\nContent-Length: " + gz.Length + "\r\nContent-Encoding: gzip\r\n\r\n");
+                byte[] response = header.Concat(gz).ToArray(); string next;
+                List<string> trace = new List<string>();
+                using (MemoryStream input = new MemoryStream(response))
+                    Check(ReaderNetwork.InspectPublicResponse(input, delegate { return false; }, Address, "/webserver.js", trace.Add, out next).SequenceEqual(plain), "Real encoded HTTP framing decoded by diagnostic path");
+                Check(trace.Contains("HTTP_ENCODING_GZIP") && trace.Contains("ENCODED_BYTES_" + gz.Length) && trace.Contains("TEXT_BYTES_" + plain.Length), "Compressed and decoded sizes traced without content");
+                using (MemoryStream input = new MemoryStream(response))
+                    Reject(delegate { ReaderNetwork.ReadResponse(input, delegate { return false; }); }, "App still rejects compressed reader-command responses");
+                string large = new string('x', 300000);
+                Check(Response("HTTP/1.0 200 OK\r\nContent-Length: 300000\r\n\r\n" + large).Length == 300000, "Larger central script fits standalone tool limit");
+                using (MemoryStream input = new MemoryStream(Bytes("HTTP/1.0 200 OK\r\nContent-Length: 300000\r\n\r\n" + large)))
+                    Reject(delegate { ReaderNetwork.ReadResponse(input, delegate { return false; }); }, "Larger diagnostic limit never changes app's 16KiB limit");
+            }
             {
                 string cache = new string('A', 32);
                 Check(ReaderSoundInspection.ReferencePath(Address, "/", "webserver.js?" + cache) == "/webserver.js", "Observed Gen1 cache suffix is discarded before GET");
@@ -51,6 +95,21 @@ namespace Tobtech.OmnikeyRco
             }
             Check(ReaderSoundInspection.FailureCode(new InvalidDataException("synthetic-private-message")) == "UNCLASSIFIED", "Arbitrary exception text is never converted into report output");
             Check(ReaderSoundInspection.FailureCode(new InvalidDataException("Oväntad HTTP-kodning från läsaren.")) == "HTTP_ENCODING", "Known HTTP failure classified without raw data");
+            {
+                List<string> trace = new List<string>(); Dictionary<string, byte[]> saved = new Dictionary<string, byte[]>();
+                Reject(delegate {
+                    ReaderSoundInspection.Collect(Address, delegate(string path) {
+                        if (path == "/") return Bytes("<script src='webserver.js'></script>");
+                        throw new InvalidDataException("Oväntad HTTP-kodning från läsaren.");
+                    }, delegate(string name, byte[] b) { saved.Add(name, b); }, delegate { return 0; }, null, trace.Add);
+                }, "No-script result still fails after a resource error");
+                Check(trace.Contains("RESOURCE_ERROR_HTTP_ENCODING") && Encoding.UTF8.GetString(saved["rapport.txt"]).Contains("HTTP_ENCODING"),
+                    "The original optional resource cause survives the final no-script error");
+                string next;
+                Reject(delegate { using (MemoryStream input = new MemoryStream(Bytes("HTTP/1.1 200 OK\r\nContent-Length: 500000\r\nContent-Encoding: gzip\r\n\r\n")))
+                    ReaderNetwork.InspectPublicResponse(input, delegate { return false; }, Address, "/webserver.js", trace.Add, out next); }, "Malformed response still records safe metadata before body failure");
+                Check(trace.Contains("HTTP_LENGTH_500000") && trace.Contains("HTTP_ENCODING_GZIP"), "Only numeric length and known encoding class are recorded");
+            }
             {
                 string next;
                 List<string> trace = new List<string>();
@@ -112,9 +171,9 @@ namespace Tobtech.OmnikeyRco
             Check(Response("HTTP/1.0 200 OK\r\n\r\n" + big).Length == big.Length, "Tool-only larger response");
             Reject(delegate { using (MemoryStream input = new MemoryStream(Bytes("HTTP/1.0 200 OK\r\n\r\n" + big))) ReaderNetwork.ReadResponse(input, delegate { return false; }); }, "App response bound remains 16KiB");
             foreach (string bad in new[] { "HTTP/1.1 302 Found\r\nLocation: http://other.invalid\r\n\r\n", "HTTP/1.1 404 Missing\r\n\r\n",
-                "HTTP/1.1 200 OK\r\nContent-Length: 262145\r\n\r\n", "HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nx",
+                "HTTP/1.1 200 OK\r\nContent-Length: 2097153\r\n\r\n", "HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nx",
                 "HTTP/1.1 200 OK\r\nContent-Length: 1\r\nTransfer-Encoding: chunked\r\n\r\nx", "HTTP/1.0 200 OK\r\nContent-Length: 0\r\n\r\n",
-                "HTTP/1.0 200 OK\r\n\r\n\0", "HTTP/1.0 200 OK\r\n\r\n" + new string('x', 262145) })
+                "HTTP/1.0 200 OK\r\n\r\n\0", "HTTP/1.0 200 OK\r\n\r\n" + new string('x', ReaderNetwork.MaxPublicFile + 1) })
                 Reject(delegate { Response(bad); }, "Redirect/malformed/empty/binary/oversized response rejected");
             Reject(delegate { using (MemoryStream input = new MemoryStream(Bytes("HTTP/1.0 200 OK\r\n\r\nx"))) ReaderNetwork.PublicFileResponse(input, delegate { return true; }); }, "HTTP deadline honored");
             {
