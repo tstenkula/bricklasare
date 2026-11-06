@@ -41,3 +41,11 @@ Windows och Mac skapar en ny kompatibilitetsprofil vid varje anslutning. Modellk
 Den observerade kombinationen Gen1 + 04020100 använder äldre ljudinställningar vars läs-/skrivmetod ännu inte är införd. Den får en förklaring i ljudknappens hjälptext utan att den moderna ljudfrågan skickas. Andra kombinationer börjar med okänt stöd: en ren läsning måste ge den validerade 130-bytetabellen innan sekvensmetoden får skriva. Ett uttryckligt noSuchName-svar spärrar metoden under den anslutningen. Transportfel och okända tabellformat räknas inte som verifierat stöd. Återanslutning eller ny firmware kräver en ny profil och kontroll.
 
 Läsning av brickor och USB-förberedelse använder fortfarande sina gemensamma, svarskontrollerade protokoll. Ingen alternativ kommandoföljd för äldre ljud eller egen firmware har gissats fram. Insamlingen behövs för att fastställa och införa just den alternativa Gen1-ljudmetoden.
+
+### Insamlingsverktyg 2
+
+Verktyget skriver `kontroll.txt` före nätverksläsning och sparar arbetssteg, HTTP-status och antal byte löpande. Det sparar inga råsvar eller undantagsmeddelanden i kontrollrapporten. `rapport.txt` sparas även om inga skript hittas. Fel i en extra resurs stoppar inte andra resurser. PowerShell skriver dessutom en separat typ-/stegrapport och försöker skapa ZIP även vid misslyckad insamling. Skript som hunnit hämtas kan fortfarande innehålla lokala uppgifter; hela underlaget ska granskas före delning.
+
+Tillåtna statiska HTTP-omdirigeringar följs högst tre gånger per resurs, till samma IP, port och verifierade USB-adapter. Inga externa mål, parametrar, autentiseringsuppgifter eller kommandosökvägar tillåts. Relativa skriptlänkar beräknas från den slutliga filsökvägen. Den totala gränsen 32 HTTP-förfrågningar omfattar även omdirigeringar; tids- och storleksgränser kvarstår. Appens striktare HTTP-parser och nätverksbeteende ändras inte. Verktyget återanvänder appens sparade adress i `reception.json` om den finns, utan att ändra filen.
+
+En fungerande APDU-anslutning i appen bevisar inte att webbgränssnittets GET-resurser kan hämtas. Ett misslyckande visas därför som insamlingsfel, utan att påstå att USB-drivrutinen saknas. Den tidigare felrapporten med enbart InvalidDataException fastställer inte grundorsaken; fysisk verifiering av verktyg 2 återstår.
