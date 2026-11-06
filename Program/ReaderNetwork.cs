@@ -238,7 +238,7 @@
         }
         private static byte[] ReadResponseBytes(Stream input, Func<bool> expired, int maximum)
         {
-            if (maximum < 1 || maximum > 262144) throw new InvalidDataException("Ogiltig svarsstorlek.");
+            if (maximum < 1 || maximum > 2097152) throw new InvalidDataException("Ogiltig svarsstorlek.");
             int remaining = MaxHeaders;
             string status = Line(input, expired, ref remaining);
             if (!Regex.IsMatch(status, @"\AHTTP/1\.[01] 200(?: .*)?\z")) throw new InvalidDataException("Läsaren svarade inte OK.");

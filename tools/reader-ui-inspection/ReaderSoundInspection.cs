@@ -215,6 +215,8 @@ namespace Tobtech.OmnikeyRco
                 case "Avklippt läsarsvar.":
                 case "Avklippt HTTP-del från läsaren.": return "HTTP_TRUNCATED";
                 case "För stort läsarsvar.": return "HTTP_BODY_LIMIT";
+                case "Uppackad läsarfil är för stor.": return "HTTP_EXPANDED_LIMIT";
+                case "Ogiltig komprimerad läsarfil.": return "HTTP_COMPRESSION_INVALID";
                 case "För stort eller ogiltigt läsarsvar.": return "HTTP_CHUNK_FORMAT_OR_LIMIT";
                 case "Tom läsarfil.": return "EMPTY_BODY";
                 case "Läsarfilen är inte text.": return "BINARY_BODY";
@@ -225,6 +227,12 @@ namespace Tobtech.OmnikeyRco
                 default: return error is InspectionLimitException ? "COLLECTION_LIMIT" : "UNCLASSIFIED";
             }
         }
+        private static void ReportResourceFailure(string path, Exception error, List<string> report, Action<string> progress)
+        {
+            string code = FailureCode(error);
+            report.Add(path + " · kunde inte hämtas · " + code + " · " + error.GetType().FullName);
+            if (progress != null) progress("RESOURCE_ERROR_" + code);
+        }
         internal static string Collect(IPAddress remote, Func<string, byte[]> fetch, Action<string, byte[]> save, Func<long> clock,
             Func<string, string> resolved = null, Action<string> progress = null)
         {
@@ -232,7 +240,7 @@ namespace Tobtech.OmnikeyRco
             HashSet<string> queued = new HashSet<string>(StringComparer.Ordinal) { "/" };
             HashSet<string> candidates = new HashSet<string>(StringComparer.Ordinal);
             List<string> report = new List<string> {
-                "BRICKLÄSAREN – UNDERLAG FÖR GEN1-LJUD, VERSION 3",
+                "BRICKLÄSAREN – UNDERLAG FÖR GEN1-LJUD, VERSION 4",
                 "Endast GET av startsida och script-/frame-/iframe-resurser via verifierad USB-anslutning.",
                 "Inga APDU-, formulär-, spara- eller återställningskommandon skickas. Ingen kod från läsaren körs.",
                 "HTML bearbetas i minnet; bara skript och rapport sparas. Granska lokala uppgifter före delning.",
@@ -244,9 +252,9 @@ namespace Tobtech.OmnikeyRco
                 string path = queue.Dequeue(); requests++;
                 byte[] bytes;
                 try { bytes = fetch(path); }
-                catch (InvalidDataException) { if (path == "/") throw; report.Add(path + " · ogiltigt filsvar; se kontroll.txt"); continue; }
-                catch (IOException) { if (path == "/") throw; report.Add(path + " · kunde inte hämtas"); continue; }
-                catch (SocketException) { if (path == "/") throw; report.Add(path + " · kunde inte hämtas"); continue; }
+                catch (InvalidDataException error) { if (path == "/") throw; ReportResourceFailure(path, error, report, progress); continue; }
+                catch (IOException error) { if (path == "/") throw; ReportResourceFailure(path, error, report, progress); continue; }
+                catch (SocketException error) { if (path == "/") throw; ReportResourceFailure(path, error, report, progress); continue; }
                 if (resolved != null)
                 {
                     string finalPath = resolved(path);
@@ -254,7 +262,7 @@ namespace Tobtech.OmnikeyRco
                     path = finalPath;
                 }
                 if (clock() > 90000) throw new IOException("Insamlingen tog för lång tid. Eventuellt delunderlag ligger kvar lokalt.");
-                if (bytes == null || bytes.Length < 1 || bytes.Length > 262144 || bytes.Length > MaxTotal - total)
+                if (bytes == null || bytes.Length < 1 || bytes.Length > ReaderNetwork.MaxPublicFile || bytes.Length > MaxTotal - total)
                     throw new InvalidDataException("För stort eller ogiltigt underlag.");
                 total += bytes.Length;
                 // Latin-1 maps every byte without executing or rewriting the source file.
@@ -310,7 +318,7 @@ namespace Tobtech.OmnikeyRco
             if (Directory.Exists(directory) || File.Exists(directory)) throw new IOException("Välj en ny, tom mapp för underlaget.");
             Directory.CreateDirectory(directory);
             Stopwatch timer = Stopwatch.StartNew();
-            List<string> lines = new List<string> { "BRICKLÄSAREN – KONTROLL 3", "Endast arbetssteg, statuskoder och antal. Inga råsvar eller undantagsmeddelanden." };
+            List<string> lines = new List<string> { "BRICKLÄSAREN – KONTROLL 4", "Endast arbetssteg, statuskoder och antal. Inga råsvar eller undantagsmeddelanden." };
             string stage = "START"; int requests = 0;
             Action persist = delegate {
                 using (FileStream file = new FileStream(Path.Combine(directory, "kontroll.txt"), FileMode.Create, FileAccess.Write, FileShare.Read))

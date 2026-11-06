@@ -14,7 +14,7 @@ try {
     Write-Host 'Skript kan innehålla lokala uppgifter. Granska underlaget innan det delas.'
     [void](Read-Host 'Tryck Enter för att börja, eller stäng fönstret för att avbryta')
     $base = Join-Path ([Environment]::GetFolderPath('LocalApplicationData')) 'Tobtech\Omnikey-RCO-v2'
-    $directory = Join-Path $base ('ljudunderlag-3-' + [DateTime]::Now.ToString('yyyyMMdd-HHmmss') + '-' + [Guid]::NewGuid().ToString('N').Substring(0,8))
+    $directory = Join-Path $base ('ljudunderlag-4-' + [DateTime]::Now.ToString('yyyyMMdd-HHmmss') + '-' + [Guid]::NewGuid().ToString('N').Substring(0,8))
     if (-not $PSBoundParameters.ContainsKey('Address')) {
         $Address = '192.168.63.99'
         $config = Join-Path $base 'reception.json'
@@ -29,7 +29,7 @@ try {
     $source = @('ReaderNetwork.cs', 'ReaderWebFiles.cs', 'ReaderSoundInspection.cs') | ForEach-Object {
         [IO.File]::ReadAllText((Join-Path $PSScriptRoot $_))
     }
-    Add-Type -TypeDefinition ($source -join "`r`n") -ReferencedAssemblies @('System.dll', 'System.Core.dll', 'System.Management.dll') -Language CSharp
+    Add-Type -TypeDefinition ($source -join "`r`n") -ReferencedAssemblies @('System.dll', 'System.Core.dll', 'System.Management.dll', 'System.IO.Compression.dll') -Language CSharp
     $phase = 'COLLECT'
     $report = [Tobtech.OmnikeyRco.ReaderSoundInspection]::Run($Address, $directory)
     $phase = 'CREATE_ZIP'
