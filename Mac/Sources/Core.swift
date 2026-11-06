@@ -341,7 +341,7 @@ final class ReaderCompatibility {
   var soundExplanation: String {
     switch soundMethod {
     case .legacyNotImplemented:
-      return "Läsarens pip: Gen1 med firmware \(firmwareDisplay) behöver en annan ljudmetod som ännu inte finns i appen."
+      return "Läsarens pip: Gen1 med firmware \(firmwareDisplay) behöver en ljudläsning via USB-webbgränssnittet som Mac-appen ännu inte använder."
     case .unavailable: return "Läsarens pip: ljudinställningen saknas i den anslutna läsarens gränssnitt."
     default: return "Läsarens pip: ljudläget har inte kunnat verifieras. Försök ansluta igen."
     }

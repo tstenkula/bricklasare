@@ -153,7 +153,16 @@
             }
             return Select(remote, evidence);
         }
+        internal static string LegacySoundQuery(string oid)
+        {
+            if (oid != "02020104010100" && oid != "04010900") throw new InvalidDataException("Otillåten Gen1-ljudfråga.");
+            return "0000000D" + (oid.Length / 2).ToString("X2", CultureInfo.InvariantCulture) + oid + "0500";
+        }
+        internal static string ReadLegacySound(IPAddress remote, string oid)
+        { return SendTo(remote, LegacySoundQuery(oid), "/ajax"); }
         internal static string Send(IPAddress remote, string command)
+        { return SendTo(remote, command, "/cjax"); }
+        private static string SendTo(IPAddress remote, string command, string resource)
         {
             if (command == null || command.Length == 0 || command.Length > 1024 || !Regex.IsMatch(command, @"\A[0-9A-Fa-f]+\z"))
                 throw new InvalidDataException("Ogiltigt läsarkommando.");
@@ -181,7 +190,7 @@
                     using (NetworkStream network = new NetworkStream(socket, false))
                     using (BufferedStream stream = new BufferedStream(network, 4096))
                     {
-                        byte[] request = Encoding.ASCII.GetBytes("POST /cjax HTTP/1.1\r\nHost: " + remote.ToString() +
+                        byte[] request = Encoding.ASCII.GetBytes("POST " + resource + " HTTP/1.1\r\nHost: " + remote.ToString() +
                             "\r\nContent-Type: application/x-www-form-urlencoded\r\nContent-Length: " + command.Length.ToString(CultureInfo.InvariantCulture) +
                             "\r\nConnection: close\r\n\r\n" + command);
                         stream.Write(request, 0, request.Length); stream.Flush();

@@ -53,4 +53,6 @@ Version 3.6.3 fixes Windows reader preparation when the USB-mode INTEGER uses a 
 
 Version 3.6.4 keeps the reader connection fix and aligns the compact sound controls with Help. Windows branding uses a larger organization name and smaller subtitle, left-aligned aspect-fitted logos, and settings dialogs constrained to the current screen working area.
 
-Known reader limitation: the tested firmware 04.02.0100 rejects the sound-table read with MIB status 2 (`noSuchName`). Reader sound control remains unavailable on that firmware until a compatible read/backup/write path is established. Unknown sound state is displayed explicitly and recorded in the error report; app sound remains independent.
+Version 3.6.5 adds a separate Windows sound backend for Gen1 firmware 04.02.0100, derived from the reader's supplied web-interface script. It reads the indicator table through the USB-bound `/ajax` interface and stores public sequence IDs 0, 1, 2 and 10. The original mode must be read and journalled before any change; only buzzer bits are changed, and readback must match. The legacy keyboard-wedge override must be off; the app never changes that switch. Physical Gen1 mute/unmute verification is still pending.
+
+The Mac app remains CCID-only. This firmware rejects the APDU sound-table query with `noSuchName`; the newly identified Windows web read route is not implemented on Mac. Its reader sound button remains unavailable on that combination. App sound remains independent on both platforms.
