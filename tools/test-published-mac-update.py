@@ -30,6 +30,7 @@ REPO = 'tstenkula/bricklasare'
 FEED_COMMIT = '136898a6df968a3e0a99b6333dbe8983e4d464c3'
 FEED_SHA256 = 'cc104420dc4e9ffdbd2ca2a7d9f5563beb4efda4616c9c2fab899e355b4313d3'
 RELEASE_PINS = {
+    '3.6.4': (2270585, '0e30355b9c99418228adc885b13e7e860bc770454c5ea601c18f4b3c32968549'),
     '3.6.2': (2_269_615, 'e82391b6a5742d38f13e8e29bbc4e99c0d279844d8422c59ad521b68d90769e2'),
     '3.6.1': (2_237_291, 'f1831ad006487c5af3026bd96c6052ce6933cd8ca48f84c3d112b5afb4746278'),
     '3.5.2': (2_186_584, '7714bbc5bc869a2835aa3ee6ce719077da6b3fbcdf0e7fc15be7b7611bfd3e6f'),
@@ -38,6 +39,10 @@ RELEASE_PINS = {
 # Fixed cases only: the stable target takes its size/hash from the real signed
 # fixture. It cannot run until that fixture has been published and reviewed.
 CASES = {
+    'stable-3.6.5': dict(source='3.6.4', target='3.6.5', channel='stable',
+                       source_tag='v3.6.4', target_tag='v3.6.5'),
+    'preview-3.6.5': dict(source='3.6.4', target='3.6.5', channel='preview',
+                       source_tag='v3.6.4', target_tag='v3.6.5-preview.1'),
     'stable-3.6.4': dict(source='3.6.2', target='3.6.4', channel='stable',
                        source_tag='v3.6.2', target_tag='v3.6.4'),
     'preview-3.6.4': dict(source='3.6.2', target='3.6.4', channel='preview',
@@ -137,7 +142,7 @@ def feed_for_case(name):
         envelope = download(f'https://raw.githubusercontent.com/{REPO}/{FEED_COMMIT}/Updates/preview.feed', 65_536)
         require(hashlib.sha256(envelope).hexdigest() == FEED_SHA256, 'Original signed 3.6.0 feed changed.')
         return envelope
-    require(name in ('stable-3.6.1', 'stable-3.6.2', 'stable-3.6.4', 'preview-3.6.4'), 'Unknown acceptance case.')
+    require(name in ('stable-3.6.1', 'stable-3.6.2', 'stable-3.6.4', 'preview-3.6.4', 'stable-3.6.5', 'preview-3.6.5'), 'Unknown acceptance case.')
     fixture = pathlib.Path(__file__).resolve().parent / ('fixtures/published-' + name + '.feed')
     require(fixture.is_file() and not fixture.is_symlink(), 'The reviewed signed stable fixture is required.')
     with fixture.open('rb') as stream:
@@ -258,6 +263,11 @@ def main():
             'utseende.json': b'{"Schema":1,"AccentHex":"#003B55","Organization":"","Subtitle":"","LogoFile":""}',
             'bevara-test.txt': b'Synthetic setting must survive the update.\n',
         }
+        if case['target'] == '3.6.5':
+            settings['lasarljud-BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB.json'] = (
+                '{"Schema":2,"ReaderId":"BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB","Firmware":"04020100",'
+                '"Protocol":"Gen1WebSequences-v1","TableLength":143,"Original":"' + '00' * 52 + '"}').encode()
+
         for name, content in settings.items():
             (data / name).write_bytes(content)
         updates = data / 'updates'

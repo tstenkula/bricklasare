@@ -15,7 +15,9 @@ on:
           - stable-3.6.2
           - stable-3.6.4
           - preview-3.6.4
-  # PRs replay all three immutable published historical cases. New 3.6.4
+          - stable-3.6.5
+          - preview-3.6.5
+  # PRs replay all three immutable published historical cases. New 3.6.5
   # cases require public assets and are dispatched with case=latest after
   # release publication, before activating the new feeds on main.
   pull_request:
@@ -26,6 +28,8 @@ on:
       - tools/fixtures/published-stable-3.6.2.feed
       - tools/fixtures/published-stable-3.6.4.feed
       - tools/fixtures/published-preview-3.6.4.feed
+      - tools/fixtures/published-stable-3.6.5.feed
+      - tools/fixtures/published-preview-3.6.5.feed
       - .github/workflows/published-update-acceptance.yml
 
 permissions:
@@ -44,7 +48,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        case: ${{ fromJSON(inputs.case == 'latest' && '["stable-3.6.4","preview-3.6.4"]' || inputs.case == 'stable-3.6.4' && '["stable-3.6.4"]' || inputs.case == 'preview-3.6.4' && '["preview-3.6.4"]' || inputs.case == 'all' && '["historical","stable-3.6.1","stable-3.6.2","stable-3.6.4","preview-3.6.4"]' || inputs.case == 'historical' && '["historical"]' || inputs.case == 'stable-3.6.1' && '["stable-3.6.1"]' || inputs.case == 'stable-3.6.2' && '["stable-3.6.2"]' || '["historical","stable-3.6.1","stable-3.6.2"]') }}
+        case: ${{ fromJSON(inputs.case == 'stable-3.6.5' && '["stable-3.6.5"]' || inputs.case == 'preview-3.6.5' && '["preview-3.6.5"]' || inputs.case == 'latest' && '["stable-3.6.5","preview-3.6.5"]' || inputs.case == 'stable-3.6.4' && '["stable-3.6.4"]' || inputs.case == 'preview-3.6.4' && '["preview-3.6.4"]' || inputs.case == 'all' && '["historical","stable-3.6.1","stable-3.6.2","stable-3.6.4","preview-3.6.4","stable-3.6.5","preview-3.6.5"]' || inputs.case == 'historical' && '["historical"]' || inputs.case == 'stable-3.6.1' && '["stable-3.6.1"]' || inputs.case == 'stable-3.6.2' && '["stable-3.6.2"]' || '["historical","stable-3.6.1","stable-3.6.2"]') }}
     steps:
       - name: Check out acceptance tools
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -72,7 +76,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        case: ${{ fromJSON(inputs.case == 'latest' && '["stable-3.6.4","preview-3.6.4"]' || inputs.case == 'stable-3.6.4' && '["stable-3.6.4"]' || inputs.case == 'preview-3.6.4' && '["preview-3.6.4"]' || inputs.case == 'all' && '["historical","stable-3.6.1","stable-3.6.2","stable-3.6.4","preview-3.6.4"]' || inputs.case == 'historical' && '["historical"]' || inputs.case == 'stable-3.6.1' && '["stable-3.6.1"]' || inputs.case == 'stable-3.6.2' && '["stable-3.6.2"]' || '["historical","stable-3.6.1","stable-3.6.2"]') }}
+        case: ${{ fromJSON(inputs.case == 'stable-3.6.5' && '["stable-3.6.5"]' || inputs.case == 'preview-3.6.5' && '["preview-3.6.5"]' || inputs.case == 'latest' && '["stable-3.6.5","preview-3.6.5"]' || inputs.case == 'stable-3.6.4' && '["stable-3.6.4"]' || inputs.case == 'preview-3.6.4' && '["preview-3.6.4"]' || inputs.case == 'all' && '["historical","stable-3.6.1","stable-3.6.2","stable-3.6.4","preview-3.6.4","stable-3.6.5","preview-3.6.5"]' || inputs.case == 'historical' && '["historical"]' || inputs.case == 'stable-3.6.1' && '["stable-3.6.1"]' || inputs.case == 'stable-3.6.2' && '["stable-3.6.2"]' || '["historical","stable-3.6.1","stable-3.6.2"]') }}
     steps:
       - name: Check out acceptance tools
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
