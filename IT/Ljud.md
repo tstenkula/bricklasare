@@ -83,3 +83,11 @@ Schema 2 för lokala Gen1-ljudkopior binder de fyra packade posterna till läsar
 Även omedelbar rollback kontrollerar att ljus, tider och repetitionsantal inte ändrats externt. Annars behålls journalen och de aktuella inställningarna. Återställning bevarar aktuell intern tabelldata. Moderna schema 1-kopior fortsätter fungera. Undvik samtidig redigering i webbgränssnittet när appen ändrar ljudet; läsaren erbjuder ingen atomisk jämför-och-skriv-operation.
 
 Protokollvägen och indexen är belagda i den insamlade koden. Den verkliga tabellens format och av/på-resultat måste fortfarande provas med fysisk läsare. Projektägaren har begärt att 3.6.5 publiceras som stabil trots det återstående hårdvaruprovet. Mac har ännu ingen verifierad läsväg för denna Gen1-tabell via CCID, så stödet aktiveras inte där.
+
+## Windows 3.6.6: repetitionsfältet
+
+Ett fysiskt Gen1-svar bekräftar en komplett 143-bytetabell med giltiga publika flaggor och repetitionsvärdet 255 för USB Ready och No USB. Version 3.6.5 avvisade felaktigt bytevärden över 127, hämtat från den äldre webbformens inmatningsgräns. HID 5127-902 E.5 avsnitt 5.1.3 dokumenterar intervallet 0–255 och 255 för fasta lägen. Valideringen godtar nu hela byteintervallet. Repetition ändras fortfarande aldrig av ljudreglaget.
+
+Källa: [HID 5127-902 E.5, avsnitt 5.1.3](https://www.hidglobal.com/sites/default/files/documentlibrary/2026/06/5127-902-e.5-omnikey-5x27ck-keyboard-wedge-user-guide-en.pdf). Den tillhandahållna tabellen lästes lokalt; råsvaret ingår inte i repot. Regressionstester använder syntetiska tabeller med 255 i motsvarande fasta händelser och kontrollerar av/på, återställning och oförändrade övriga byte. Samtliga 256 repetitionsvärden provas som rena läsningar.
+
+Felrapporter skiljer nu längdfel från okända publika flaggor och innehåller bara tabellängd samt felposition, aldrig tabellens rådata. En lyckad fysisk läsning av tabellen är bekräftad; faktisk av/på på hårdvaran med den korrigerade versionen återstår.

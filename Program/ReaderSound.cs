@@ -20,6 +20,18 @@
         public string Protocol { get; set; }
         public int TableLength { get; set; }
     }
+    internal enum SoundTableCheck { Length, Flags }
+    internal sealed class SoundTableShape
+    {
+        internal readonly int Length;
+        internal readonly SoundTableCheck Check;
+        internal readonly int Sequence, Step;
+        internal SoundTableShape(byte[] data, SoundTableCheck check, int sequence, int step)
+        {
+            Length = data == null ? -1 : Math.Min(data.Length, 4096);
+            Check = check; Sequence = sequence; Step = step;
+        }
+    }
     public sealed partial class ReaderClient
     {
         // HID 5127-903 B.7 A.5.18/B.2.6: ten 13-byte sequences.
@@ -45,18 +57,27 @@
         internal Func<string, string> TestLegacySoundTransport;
         private bool LegacySound { get { return Compatibility != null && Compatibility.UsesLegacySoundWeb; } }
         private int[] SoundSequences { get { return LegacySound ? new int[] { 0, 1, 2, 10 } : new int[] { 0, 1, 2 }; } }
+        private static InvalidDataException LegacySoundFormat(byte[] data, SoundTableCheck check, int sequence = -1, int step = -1)
+        {
+            InvalidDataException error = new InvalidDataException("Gen1-läsarens ljudformat stöds inte.");
+            // Shape only: never retain or report the sequence bytes themselves.
+            error.Data["Tobtech.SoundTableShape"] = new SoundTableShape(data, check, sequence, step);
+            return error;
+        }
         private void ValidateCurrentSound(byte[] data)
         {
             if (!LegacySound) { ValidateSound(data); return; }
             // The GUI uses 13-byte records and public sequence indices 0,1,2,10.
             // Its BER decoder supports up to 255 data bytes; preserve all other records.
             if (data == null || data.Length < 143 || data.Length > 247 || data.Length % 13 != 0)
-                throw new InvalidDataException("Gen1-läsarens ljudformat stöds inte.");
+                throw LegacySoundFormat(data, SoundTableCheck.Length);
             foreach (int sequence in SoundSequences)
             {
                 for (int step = 0; step < 6; step++)
-                    if ((data[sequence * 13 + step * 2] & ~0x13) != 0) throw new InvalidDataException("Gen1-läsarens ljudformat stöds inte.");
-                if (data[sequence * 13 + 12] > 127) throw new InvalidDataException("Gen1-läsarens ljudformat stöds inte.");
+                    if ((data[sequence * 13 + step * 2] & ~0x13) != 0) throw LegacySoundFormat(data, SoundTableCheck.Flags, sequence, step);
+                // HID 5127-902 E.5 section 5.1.3 permits repeats 0..255;
+                // FF is a permanent/static event. Preserve the entire byte unchanged.
+                // The older web form's max=127 is not the firmware's valid range.
             }
         }
         private Tlv ReadLegacySoundMib(string oid)
