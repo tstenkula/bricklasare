@@ -2,7 +2,7 @@
 param([Parameter(Mandatory=$true)][string]$Plan, [switch]$VerifyPackageOnly)
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
-$CurrentVersion = '3.6.7'
+$CurrentVersion = '3.6.8'
 $PublicKey = '<RSAKeyValue><Modulus>n8JTA0cbbRrraGNb11fX4Dyanoa8S9TzTBGl8Edfagx743HROUj9lDCwJvuVF6cNpH4mB2dN33O+XfYKZMrUaJ0K/3Q9gmPLqedlvbpuHWlEaeUzekdT4Npo7EZpwo+Cwcxjlmlahgoll1MkjEu8QERzAQEeuTB4vZCsKdXdYcRlKAQuPEKqCWkiH49prMDvVdqUUYLl2TPLcHPD8MDdkbFh/glWJDTRB1No++PCUU8PVG80X94BnMe1E/+LLyTjxaNYVSsIFZlD9XX3eup7t/UTKUk9RC1u8WY23l74ccXwy71lirntfOFW6MdK4kFsIGOk+2PF/QGwoIcpwfhSt7+Id0y85VGEqe002CngsfxUQ7BkAAAB2+D4vPcU3FBLkleYkG5B+WXasbCslTGFXG+hnFpTU2R5XQECRJ2UXjuJN/lDaw8AE7dwUTTfibfYGs9mAUZ6nECBsL3OmpXtCK9ZyTHx2AWs+hvXP+7hzcluf12K2H4MveyyNcOFSNed</Modulus><Exponent>AQAB</Exponent></RSAKeyValue>'
 $backup = $null
 $mutex = $null
@@ -160,23 +160,23 @@ try {
         $destination = Join-Path $candidate ($name.Replace('/', '\'))
         if ($name.EndsWith('/')) { [void][IO.Directory]::CreateDirectory($destination); continue }
         [void][IO.Directory]::CreateDirectory([IO.Path]::GetDirectoryName($destination))
-        $settingsStreamStream = $entry.Open()
+        $archiveStream = $entry.Open()
         $outputStream = [IO.File]::Open($destination, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write, [IO.FileShare]::None)
         try {
             $buffer = New-Object byte[] 32768
-            while (($count = $settingsStreamStream.Read($buffer, 0, $buffer.Length)) -gt 0) {
+            while (($count = $archiveStream.Read($buffer, 0, $buffer.Length)) -gt 0) {
                 if ($outputStream.Length + $count -gt $entry.Length) { throw 'Invalid expanded size' }
                 $outputStream.Write($buffer, 0, $count)
             }
             if ($outputStream.Length -ne $entry.Length) { throw 'Truncated archive entry' }
-        } finally { $outputStream.Dispose(); $settingsStreamStream.Dispose() }
+        } finally { $outputStream.Dispose(); $archiveStream.Dispose() }
     }
     $zip.Dispose(); $zip = $null
     $memory.Dispose(); $memory = $null
     $entrySource = [IO.File]::ReadAllText((Join-Path $candidate 'Program\Entry.cs'))
     if (-not $entrySource.Contains('AssemblyVersion("' + $asset.Version + '.0")')) { throw 'Unexpected package version' }
     $shell = Join-Path $PSHOME 'powershell.exe'
-    $test = Start-Process -FilePath $shell -ArgumentList @('-NoProfile','-STA','-File',('"' + (Join-Path $candidate 'Program\Starta-Bricklasaren.ps1') + '"'),'-SelfTestOnly') -PassThru
+    $test = Start-Process -FilePath $shell -ArgumentList @('-NoProfile','-STA','-File',('"' + (Join-Path $candidate 'Program\Starta-Bricklasaren.ps1') + '"'),'-SelfTestOnly') -WindowStyle Hidden -RedirectStandardOutput (Join-Path $jobRoot 'validation-output.txt') -RedirectStandardError (Join-Path $jobRoot 'validation-error.txt') -PassThru
     if (-not $test.WaitForExit(120000)) { $test.Kill(); throw 'New version self-test timed out' }
     if ($test.ExitCode -ne 0) { throw 'New version self-test failed' }
     Assert-PlainPath $target
@@ -188,7 +188,8 @@ try {
     catch { [IO.Directory]::Move($backup, $target); $backup = $null; throw }
     Assert-UpdateSettingsSnapshot $dataRoot $preservedSettings
     $mutex.ReleaseMutex(); $locked = $false
-    Start-Process -FilePath (Join-Path $target 'Starta-Bricklasaren.cmd') -WorkingDirectory $target
+    $mutex.Dispose(); $mutex = $null
+    Start-Process -FilePath $shell -ArgumentList @('-NoProfile','-STA','-File',('"' + (Join-Path $target 'Program\Starta-Bricklasaren.ps1') + '"')) -WorkingDirectory $target -WindowStyle Hidden
     [IO.File]::WriteAllText((Join-Path $dataRoot 'uppdatering-status.txt'), 'Uppdatering installerad. Tidigare programmapp finns kvar som .previous-kopia.')
     Remove-Item -LiteralPath $archive -Force
     $oldStage = Join-Path $jobRoot 'package'

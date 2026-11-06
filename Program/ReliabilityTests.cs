@@ -306,6 +306,27 @@
             using (ReceptionForm form = new ReceptionForm(true, directory))
             {
                 form.Show(); Application.DoEvents();
+                UpdateAsset offered = new UpdateAsset { Version = "99.0.0", Channel = Field<WorkflowSettings>(form, "workflow").Channel };
+                Call(form, "SetAvailableUpdate", offered); Application.DoEvents();
+                Button updateButton = Field<Button>(form, "updateNow");
+                Label offerText = Field<Label>(form, "updateOfferText");
+                Check(updateButton.Visible && updateButton.Enabled && updateButton.Text == "Uppdatera" && offerText.Text.Contains("99.0.0"), "Available update is actionable directly in the main reader window");
+                Check(updateButton.Parent == offerText.Parent && updateButton.Left >= offerText.Right && Math.Abs((updateButton.Top + updateButton.Height / 2) - (offerText.Top + offerText.Height / 2)) <= 2, "Update button sits beside the announcement with aligned vertical centres");
+                RenderSnapshot(form, "uppdatering-tillganglig");
+                form.ClientSize = new Size(800, 600); Application.DoEvents();
+                RenderSnapshot(form, "uppdatering-tillganglig-kompakt");
+                Call(form, "ClearResults");
+                Check(updateButton.Visible, "Clearing card results cannot erase the available update action");
+                Call(form, "SetBusy", true);
+                Check(!updateButton.Enabled, "Main update action is disabled during reader work");
+                Call(form, "SetBusy", false);
+                WorkflowSettings settings = Field<WorkflowSettings>(form, "workflow"); string originalChannel = settings.Channel;
+                settings.Channel = originalChannel == "stable" ? "preview" : "stable"; Call(form, "UpdateButtons");
+                Check(!updateButton.Visible, "Changing channel hides an offer from the previous channel");
+                settings.Channel = originalChannel; Call(form, "UpdateButtons");
+                Check(updateButton.Enabled, "Idle reader window restores the available update action");
+                Call(form, "SetAvailableUpdate", (object)null);
+                Check(!updateButton.Visible, "No update announcement is shown when no newer version is available");
                 int calls = 0;
                 Func<Action<UpdateProgress>, System.Threading.Tasks.Task> work = delegate(Action<UpdateProgress> progress) { calls++; return System.Threading.Tasks.Task.FromResult(true); };
                 Call(form, "SetBusy", true);
@@ -329,6 +350,40 @@
                 string before = Field<Label>(form, "updateTitle").Text;
                 late(new UpdateProgress(UpdatePhase.Download, 50, 100));
                 Check(!Field<UiCard>(form, "updatePanel").Visible && Field<Label>(form, "updateTitle").Text == before, "Late download callback cannot revive a finished progress view");
+            }
+            using (ReceptionForm form = new ReceptionForm(true, directory))
+            {
+                form.Show(); Application.DoEvents();
+                var result = ConfirmedUpdate(form, directory, delegate(Action<UpdateProgress> progress) {
+                    SetField(form, "updateHandoff", true);
+                    return System.Threading.Tasks.Task.FromResult(true);
+                });
+                Check(result.Result && Field<bool>(form, "busy"), "Installer handoff retains busy ownership until the old window closes");
+                FormClosingEventArgs closing = new FormClosingEventArgs(CloseReason.ApplicationExitCall, false);
+                Call(form, "OnFormClosing", closing);
+                Check(!closing.Cancel, "Owned installer handoff can close the old form without invoking scan cancellation");
+                form.Close();
+            }
+            string mutexName = "Local\\Bricklasare-test-" + Guid.NewGuid().ToString("N");
+            using (var original = new System.Threading.Mutex(false, mutexName))
+            {
+                bool created;
+                using (var next = new System.Threading.Mutex(false, mutexName, out created))
+                {
+                    bool acquired = ReceptionProgram.TryLockInstance(next);
+                    try { Check(!created && acquired, "A released installer mutex may still exist when the app restarts"); }
+                    finally { if (acquired) next.ReleaseMutex(); }
+                }
+                original.WaitOne();
+                try {
+                    bool blocked = System.Threading.Tasks.Task.Run(delegate {
+                        using (var competing = new System.Threading.Mutex(false, mutexName)) {
+                            bool acquired = ReceptionProgram.TryLockInstance(competing);
+                            if (acquired) competing.ReleaseMutex(); return !acquired;
+                        }
+                    }).Result;
+                    Check(blocked, "A genuinely held application mutex still prevents concurrent ownership");
+                } finally { original.ReleaseMutex(); }
             }
             using (ReceptionForm form = ReaderPreview(directory, FormatProfiles.Combo))
             {

@@ -35,7 +35,7 @@ Local settings, recovery journals, reader profiles, logos and logs stay outside 
 ## Build and verification
 
 Windows offline checks: `IT\Kor-sjalvtester.cmd`. Build a ZIP: `tools\build-windows.ps1`.
-Mac: `Mac/build.sh`, followed by `dist/Bricklasaren.app/Contents/MacOS/Bricklasaren --self-test`. `--render-tests <folder>` renders the UI with synthetic data.
+Mac: `Mac/build.sh`, followed by `dist/Bricklasaren.app/Contents/MacOS/Bricklasaren --full-self-test`. `--render-tests <folder>` renders the UI with synthetic data.
 
 CI compiles both platforms, runs offline reader simulations, update verification and settings/resource tests, and builds packages. Hardware behavior and a full-day USB/memory soak still require a real reader. macOS builds are ad-hoc signed for Apple Silicon; they are not Developer ID signed or notarized. Windows publisher warnings are not removed by this release. Update-feed signatures authenticate downloads separately from operating-system code signing.
 
@@ -60,3 +60,5 @@ The Mac app remains CCID-only. This firmware rejects the APDU sound-table query 
 Version 3.6.6 corrects the Gen1 repeat-byte validation: all documented values 0–255 are accepted and preserved, including static-event value 255. The physical reader response confirms the table shape; corrected mute/unmute still needs hardware verification. Windows reports now identify invalid table lengths versus unknown state flags without raw sequence values, and distinguish persistent recovery files from an active scan when an update is blocked.
 
 Version 3.6.7 allows idle application updates with saved reader recovery. The installer holds the application lock, creates a bounded private byte-for-byte backup of all local JSON settings, verifies that original settings remain unchanged, and replaces only the separate program folder. Active reader operations remain blocked during updates. Reader recovery files are never deleted or hidden. Already-blocked versions through 3.6.6 need one manual installation because their old gate runs before downloading the fixed updater.
+
+Version 3.6.8 separates installer preflight from the interactive regression suite. The historical `-SelfTestOnly` / `--self-test` installer arguments now compile/load and validate the package without opening application windows or touching readers or local settings. Full CI/IT suites use `-FullSelfTest` / `--full-self-test`. This compatibility also applies when an older helper installs 3.6.8. Windows restart claims the released application mutex correctly, and the updater hands off without reopening reader controls. A new-version announcement includes an **Uppdatera** button in the main window on both platforms; no IT settings are needed to download it.

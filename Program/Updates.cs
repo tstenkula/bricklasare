@@ -84,7 +84,7 @@
     }
     internal static class Updates
     {
-        internal const string Current = "3.6.7";
+        internal const string Current = "3.6.8";
         internal const string PublicKey = "<RSAKeyValue><Modulus>n8JTA0cbbRrraGNb11fX4Dyanoa8S9TzTBGl8Edfagx743HROUj9lDCwJvuVF6cNpH4mB2dN33O+XfYKZMrUaJ0K/3Q9gmPLqedlvbpuHWlEaeUzekdT4Npo7EZpwo+Cwcxjlmlahgoll1MkjEu8QERzAQEeuTB4vZCsKdXdYcRlKAQuPEKqCWkiH49prMDvVdqUUYLl2TPLcHPD8MDdkbFh/glWJDTRB1No++PCUU8PVG80X94BnMe1E/+LLyTjxaNYVSsIFZlD9XX3eup7t/UTKUk9RC1u8WY23l74ccXwy71lirntfOFW6MdK4kFsIGOk+2PF/QGwoIcpwfhSt7+Id0y85VGEqe002CngsfxUQ7BkAAAB2+D4vPcU3FBLkleYkG5B+WXasbCslTGFXG+hnFpTU2R5XQECRJ2UXjuJN/lDaw8AE7dwUTTfibfYGs9mAUZ6nECBsL3OmpXtCK9ZyTHx2AWs+hvXP+7hzcluf12K2H4MveyyNcOFSNed</Modulus><Exponent>AQAB</Exponent></RSAKeyValue>";
         internal const string Unavailable = "Det gick inte att söka efter uppdateringar. Kontrollera internetanslutningen och försök igen senare. Du kan fortsätta använda Brickläsaren.";
         internal static Version ParseVersion(string value)
@@ -245,7 +245,36 @@
     }
     public sealed partial class ReceptionForm
     {
+        private UpdateAsset availableUpdate;
+        private readonly TableLayoutPanel updateOffer = new TableLayoutPanel { Dock = DockStyle.Top, AutoSize = true, ColumnCount = 2, Visible = false, Margin = new Padding(0, 0, 0, 12) };
+        private readonly Label updateOfferText = Ui.Label("", 10.5F, false);
+        private readonly Button updateNow = Ui.Button("Uppdatera", false);
+        private void InitializeUpdateOffer(TableLayoutPanel root)
+        {
+            updateOffer.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+            updateOffer.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+            updateOfferText.Anchor = AnchorStyles.Left; updateOfferText.Dock = DockStyle.None;
+            updateOfferText.Margin = new Padding(0, 0, 12, 0);
+            updateNow.Margin = new Padding(0); updateNow.MinimumSize = new Size(110, 36);
+            updateNow.AccessibleDescription = "Hämta och installera den nya versionen av Brickläsaren.";
+            updateNow.Click += async delegate { await CheckUpdates(); };
+            updateOffer.Controls.Add(updateOfferText, 0, 0); updateOffer.Controls.Add(updateNow, 1, 0);
+            updateOffer.SizeChanged += delegate { updateOfferText.MaximumSize = new Size(Math.Max(100, updateOffer.ClientSize.Width - updateNow.Width - 16), 0); };
+            Ui.Add(root, updateOffer);
+        }
+        private void SetAvailableUpdate(UpdateAsset asset)
+        {
+            availableUpdate = asset; UpdateUpdateOffer();
+        }
+        private void UpdateUpdateOffer()
+        {
+            bool available = availableUpdate != null && availableUpdate.Channel == workflow.Channel;
+            updateOffer.Visible = available && !updateHandoff;
+            updateNow.Enabled = available && !busy && !updateChecking && !reconnectPending;
+            updateOfferText.Text = available ? "Version " + availableUpdate.Version + " finns tillgänglig." : "";
+        }
         private bool updateChecking;
+        private bool updateHandoff;
         private int updateProgressGeneration;
         private readonly UiCard updatePanel = new UiCard { Visible = false, Padding = new Padding(16, 10, 16, 10), Margin = new Padding(0, 0, 0, 12) };
         private readonly Label updateTitle = Ui.Label("Hämtar uppdatering", 11F, true);
@@ -280,16 +309,17 @@
         private async Task CheckUpdates(bool automatic = false)
         {
             if (busy || updateChecking) return;
-            updateChecking = true;
+            updateChecking = true; UpdateUpdateOffer();
             UpdateAsset asset;
             string channel = workflow.Channel;
             try { asset = await Task.Run(delegate { return Updates.Check(channel); }); }
             catch (WebException) { if (IsDisposed || Disposing) return; if (!automatic) MessageBox.Show(this, Updates.Unavailable, "Uppdateringar"); return; }
             catch { if (IsDisposed || Disposing) return; if (!automatic) MessageBox.Show(this, "Uppdateringsinformationen kunde inte verifieras. Ingen fil har installerats.", "Uppdateringar"); return; }
-            finally { updateChecking = false; }
+            finally { updateChecking = false; UpdateUpdateOffer(); }
             if (IsDisposed || busy || workflow.Channel != channel) return;
-            if (asset == null || Updates.ParseVersion(asset.Version) <= Updates.ParseVersion(Updates.Current)) { if (!automatic) MessageBox.Show(this, "Ingen nyare version finns i vald kanal.", "Uppdateringar"); return; }
-            if (automatic) { notice.Text = "Version " + asset.Version + " finns. Välj Hjälp → IT-inställningar → Sök efter uppdatering."; return; }
+            if (asset == null || Updates.ParseVersion(asset.Version) <= Updates.ParseVersion(Updates.Current)) { SetAvailableUpdate(null); if (!automatic) MessageBox.Show(this, "Ingen nyare version finns i vald kanal.", "Uppdateringar"); return; }
+            SetAvailableUpdate(asset);
+            if (automatic) return;
             if (MessageBox.Show(this, "Version " + asset.Version + "\r\n\r\n" + asset.Notes + "\r\n\r\nHämta och installera? Appen startas om när uppdateringen är klar. Dina inställningar sparas.", "Uppdatera Brickläsaren", MessageBoxButtons.YesNo) != DialogResult.Yes) return;
             bool launched = false;
             try {
@@ -297,8 +327,9 @@
                     string staged = await Task.Run(delegate { return Updates.Stage(asset, progress); });
                     if (reconnectPending) throw new InvalidOperationException();
                     string shell = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System), "WindowsPowerShell", "v1.0", "powershell.exe");
-                    using (Process helper = Process.Start(new ProcessStartInfo(shell, "-NoProfile -File \"" + Path.Combine(staged,"Install-Update.ps1") + "\" -Plan \"" + Path.Combine(staged,"plan.json") + "\"") { UseShellExecute = false }))
+                    using (Process helper = Process.Start(new ProcessStartInfo(shell, "-NoProfile -File \"" + Path.Combine(staged,"Install-Update.ps1") + "\" -Plan \"" + Path.Combine(staged,"plan.json") + "\"") { UseShellExecute = false, CreateNoWindow = true, WindowStyle = ProcessWindowStyle.Hidden }))
                         if (helper == null) throw new IOException("Installationshjälpen kunde inte startas.");
+                    updateHandoff = true;
                 });
             } catch { if (!IsDisposed && !Disposing) MessageBox.Show(this, "Uppdateringen kunde inte förberedas. Nuvarande version finns kvar. Kontrollera internet och att programmappen är skrivbar."); }
             if (launched) Close();
@@ -319,7 +350,7 @@
             }
             finally
             {
-                ++updateProgressGeneration; updatePanel.Visible = false; updateBar.Indeterminate = false; SetBusy(false);
+                ++updateProgressGeneration; updatePanel.Visible = false; updateBar.Indeterminate = false; if (!updateHandoff) SetBusy(false);
                 if (!complete) SetInstruction("UPPDATERING AVBRUTEN", "Uppdateringen blev inte klar", "Nuvarande version finns kvar. Försök igen när läsaren är klar.", true);
             }
         }

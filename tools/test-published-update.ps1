@@ -365,9 +365,13 @@ namespace Tobtech.Acceptance {
         }
         $status = Join-Path $data 'uppdatering-status.txt'; $selfTest = Join-Path $data 'sjalvtest-reception.txt'
         Copy-Item -LiteralPath $status -Destination (Join-Path $OutputDirectory 'installer-status.txt')
-        Copy-Item -LiteralPath $selfTest -Destination (Join-Path $OutputDirectory 'installed-self-test.txt')
         Confirm ([IO.File]::ReadAllText($status).StartsWith('Uppdatering installerad.')) 'Installer reports a completed installation'
-        Confirm ([IO.File]::ReadAllText($selfTest).Contains($targetVersion) -and [IO.File]::ReadAllText($selfTest).Contains('tester av inställningar och resurshantering godkända.')) 'Published new application passes its actual offline self-tests'
+        if ([version]$targetVersion -ge [version]'3.6.8') {
+            Confirm (-not (Test-Path -LiteralPath $selfTest)) 'Installation uses quiet validation instead of running the interactive regression suite'
+        } else {
+            Copy-Item -LiteralPath $selfTest -Destination (Join-Path $OutputDirectory 'installed-self-test.txt')
+            Confirm ([IO.File]::ReadAllText($selfTest).Contains($targetVersion) -and [IO.File]::ReadAllText($selfTest).Contains('tester av inställningar och resurshantering godkända.')) 'Published new application passes its actual offline self-tests'
+        }
         Confirm (Same-Manifest $newFiles (File-Manifest $target)) ('Installed files exactly match the published ' + $targetVersion + ' ZIP')
         $backups = @(Get-ChildItem -LiteralPath $work -Directory | Where-Object { $_.Name -like 'installed app.previous-*' })
         Confirm ($backups.Count -eq 1 -and (Same-Manifest $oldFiles (File-Manifest $backups[0].FullName))) 'Previous installation is preserved byte for byte as a backup'

@@ -130,6 +130,22 @@ extension SelfTests {
     let controller = AppController(store: store, preview: true)
     controller.makeWindow()
     controller.workflow.channel = "preview"
+    controller.availableUpdate = asset
+    controller.rebuild()
+    try check(controller.readerView?.updateOffer.isHidden == false
+      && controller.readerView?.updateNow.isEnabled == true
+      && controller.readerView?.updateOfferText.stringValue.contains(asset.Version) == true,
+      "Available update has a main-window button beside its version announcement")
+    controller.clearResults(); controller.rebuild()
+    try check(controller.readerView?.updateOffer.isHidden == false,
+      "Clearing tag results preserves the available update action")
+    controller.busy = true; controller.rebuild()
+    try check(controller.readerView?.updateNow.isEnabled == false,
+      "Reader work disables the main update action")
+    controller.busy = false; controller.workflow.channel = "stable"; controller.rebuild()
+    try check(controller.readerView?.updateOffer.isHidden == true,
+      "An update offer cannot leak into another channel")
+    controller.workflow.channel = "preview"; controller.rebuild()
     let readerOperation = CancelToken()
     controller.busy = true
     controller.token = readerOperation

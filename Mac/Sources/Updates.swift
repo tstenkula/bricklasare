@@ -154,11 +154,24 @@ final class UpdateDownload: NSObject, URLSessionDataDelegate {
   }
 }
 enum Updates {
-  static let current = "3.6.7"
+  static let current = "3.6.8"
   static let publicKey =
     "MIIBigKCAYEAn8JTA0cbbRrraGNb11fX4Dyanoa8S9TzTBGl8Edfagx743HROUj9lDCwJvuVF6cNpH4mB2dN33O+XfYKZMrUaJ0K/3Q9gmPLqedlvbpuHWlEaeUzekdT4Npo7EZpwo+Cwcxjlmlahgoll1MkjEu8QERzAQEeuTB4vZCsKdXdYcRlKAQuPEKqCWkiH49prMDvVdqUUYLl2TPLcHPD8MDdkbFh/glWJDTRB1No++PCUU8PVG80X94BnMe1E/+LLyTjxaNYVSsIFZlD9XX3eup7t/UTKUk9RC1u8WY23l74ccXwy71lirntfOFW6MdK4kFsIGOk+2PF/QGwoIcpwfhSt7+Id0y85VGEqe002CngsfxUQ7BkAAAB2+D4vPcU3FBLkleYkG5B+WXasbCslTGFXG+hnFpTU2R5XQECRJ2UXjuJN/lDaw8AE7dwUTTfibfYGs9mAUZ6nECBsL3OmpXtCK9ZyTHx2AWs+hvXP+7hzcluf12K2H4MveyyNcOFSNedAgMBAAE="
   static let unavailable =
     "Det gick inte att söka efter uppdateringar. Kontrollera internetanslutningen och försök igen senare. Du kan fortsätta använda Brickläsaren."
+  // Production preflight must run before NSApplication is initialized. No test
+  // windows, temporary reader state or user-profile/report writes are allowed.
+  static func validateInstallation(_ bundle: Bundle = .main) throws {
+    try require(bundle.bundleIdentifier == "se.tobtech.bricklasaren"
+      && bundle.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String == current,
+      "Fel programversion i paketet.")
+    guard let resources = bundle.resourceURL else { throw fail("INSTALL", "Programresurser saknas.") }
+    for name in ["Bricklasaren.icns", "LICENSE.txt", "Lucide/volume-2.png", "Lucide/volume-off.png"] {
+      let path = resources.appendingPathComponent(name)
+      let attributes = try FileManager.default.attributesOfItem(atPath: path.path)
+      try require(attributes[.type] as? FileAttributeType == .typeRegular, "Programresurser saknas.")
+    }
+  }
   static func version(_ text: String) throws -> [Int] {
     let parts = text.split(separator: ".", omittingEmptySubsequences: false)
     try require(
@@ -535,12 +548,14 @@ extension AppController {
   func checkUpdates(automatic: Bool = false) {
     guard !busy, !updateChecking else { return }
     updateChecking = true
+    rebuild()
     let channel = workflow.channel
     DispatchQueue.global(qos: .utility).async { [weak self] in
       let result = Result { try Updates.check(channel) }
       DispatchQueue.main.async {
         guard let self else { return }
         self.updateChecking = false
+        self.rebuild()
         guard !self.busy, self.workflow.channel == channel else { return }
         switch result {
         case .failure(let error):
@@ -555,6 +570,8 @@ extension AppController {
             let current = try? Updates.version(Updates.current),
             current.lexicographicallyPrecedes(next)
           else {
+            self.availableUpdate = nil
+            self.rebuild()
             if !automatic {
               let a = NSAlert()
               a.messageText = "Ingen nyare version finns i vald kanal."
@@ -562,11 +579,9 @@ extension AppController {
             }
             return
           }
-          if automatic {
-            self.notice = "Version \(asset.Version) finns. Välj Hjälp → Sök efter uppdatering."
-            self.rebuild()
-            return
-          }
+          self.availableUpdate = asset
+          self.rebuild()
+          if automatic { return }
           self.offerUpdate(asset)
         }
       }
