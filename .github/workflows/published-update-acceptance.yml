@@ -3,6 +3,11 @@ name: Published update acceptance
 on:
   workflow_dispatch:
     inputs:
+      platform:
+        description: Platform to exercise
+        type: choice
+        default: all
+        options: [all, windows, macos]
       case:
         description: Published installer acceptance case
         type: choice
@@ -54,7 +59,7 @@ concurrency:
 jobs:
   windows:
     name: Published Windows ${{ matrix.case }}
-    if: github.repository == 'tstenkula/bricklasare' && (github.event_name == 'workflow_dispatch' || (github.event.pull_request.head.repo.full_name == 'tstenkula/bricklasare' && github.event.pull_request.base.repo.full_name == 'tstenkula/bricklasare' && github.head_ref != ''))
+    if: github.repository == 'tstenkula/bricklasare' && (github.event_name == 'workflow_dispatch' || (github.event.pull_request.head.repo.full_name == 'tstenkula/bricklasare' && github.event.pull_request.base.repo.full_name == 'tstenkula/bricklasare' && github.head_ref != '')) && inputs.platform != 'macos'
     runs-on: windows-2022
     timeout-minutes: 12
     strategy:
@@ -82,7 +87,7 @@ jobs:
 
   macos:
     name: Published Mac ${{ matrix.case }}
-    if: github.repository == 'tstenkula/bricklasare' && (github.event_name == 'workflow_dispatch' || (github.event.pull_request.head.repo.full_name == 'tstenkula/bricklasare' && github.event.pull_request.base.repo.full_name == 'tstenkula/bricklasare' && github.head_ref != ''))
+    if: github.repository == 'tstenkula/bricklasare' && (github.event_name == 'workflow_dispatch' || (github.event.pull_request.head.repo.full_name == 'tstenkula/bricklasare' && github.event.pull_request.base.repo.full_name == 'tstenkula/bricklasare' && github.head_ref != '')) && inputs.platform != 'windows'
     runs-on: macos-26
     timeout-minutes: 15
     strategy:

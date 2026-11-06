@@ -157,7 +157,7 @@ def feed_for_case(name):
         envelope = download(f'https://raw.githubusercontent.com/{REPO}/{FEED_COMMIT}/Updates/preview.feed', 65_536)
         require(hashlib.sha256(envelope).hexdigest() == FEED_SHA256, 'Original signed 3.6.0 feed changed.')
         return envelope
-    require(name in ('stable-3.6.1', 'stable-3.6.2', 'stable-3.6.4', 'preview-3.6.4', 'stable-3.6.5', 'preview-3.6.5', 'stable-3.6.6', 'preview-3.6.6', 'stable-3.6.7', 'preview-3.6.7'), 'Unknown acceptance case.')
+    require(name in CASES, 'Unknown acceptance case.')
     fixture = pathlib.Path(__file__).resolve().parent / ('fixtures/published-' + name + '.feed')
     require(fixture.is_file() and not fixture.is_symlink(), 'The reviewed signed stable fixture is required.')
     with fixture.open('rb') as stream:
