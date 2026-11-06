@@ -293,14 +293,19 @@ def main():
             (data / name).write_bytes(content)
         updates = data / 'updates'
         updates.mkdir(mode=0o700)
-        job = updates / str(uuid.uuid4())
-        job.mkdir(mode=0o700)
-        helper = job / 'installer'
-        shutil.copy2(binary, helper)  # Exact old executable, no trust or code substitution.
-        helper_hash = hashlib.sha256(helper.read_bytes()).hexdigest()
-        plan = job / 'plan.json'
+        helper_hash = hashlib.sha256(binary.read_bytes()).hexdigest()
 
         def install_case(name, feed, package, expected_success):
+            # Installers preserve settings before package validation. A rejected
+            # attempt can therefore retain its private backup. Every attempt
+            # needs a fresh job, exactly as the application stages updates.
+            job = updates / str(uuid.uuid4())
+            job.mkdir(mode=0o700)
+            helper = job / 'installer'
+            shutil.copy2(binary, helper)  # Exact old executable, no trust substitution.
+            require(hashlib.sha256(helper.read_bytes()).hexdigest() == helper_hash,
+                    'Staged installer differs from the pinned prior binary.')
+            plan = job / 'plan.json'
             (job / 'release.feed').write_bytes(feed)
             (job / 'package.zip').write_bytes(package)
             parent = subprocess.Popen(['/bin/sleep', '0.5'])
@@ -336,6 +341,7 @@ def main():
                 require(tree(target) == original_tree and not list(target.parent.glob('Bricklasaren.previous-*.app')),
                         name + ': rejection modified the original application.')
             result['checks'].append(name)
+            return job
 
         invalid_feed = bytearray(envelope)
         invalid_feed[40] ^= 1
@@ -350,7 +356,7 @@ def main():
                 install_case('Pending recovery blocks replacement and preserves settings', envelope, new_zip, False)
             finally:
                 pending.unlink()
-        install_case(f"Actual {case['source']} helper installs the signed {case['target']} package", envelope, new_zip, True)
+        job = install_case(f"Actual {case['source']} helper installs the signed {case['target']} package", envelope, new_zip, True)
         if permits_recovery:
             for name, content in settings.items():
                 if name.lower().endswith('.json'):
