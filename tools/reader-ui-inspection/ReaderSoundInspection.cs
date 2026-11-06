@@ -188,6 +188,34 @@ namespace Tobtech.OmnikeyRco
             using (FileStream output = new FileStream(Path.Combine(directory, name), FileMode.CreateNew, FileAccess.Write, FileShare.None))
             { output.Write(bytes, 0, bytes.Length); output.Flush(true); }
         }
+        internal static string FailureCode(Exception error)
+        {
+            // Only exact, locally defined messages become codes. Never print arbitrary
+            // exception text, response data, user input or a remote Location value.
+            switch (error.Message)
+            {
+                case "Ange läsarens lokala IPv4-adress.": return "ADDRESS_INVALID";
+                case "Läsaren svarade inte OK.": return "HTTP_STATUS";
+                case "Dubbelt HTTP-huvud.": return "HTTP_DUPLICATE_HEADER";
+                case "Ogiltigt HTTP-huvud.": return "HTTP_HEADER_INVALID";
+                case "Oväntad HTTP-kodning från läsaren.": return "HTTP_ENCODING";
+                case "För stort HTTP-huvud från läsaren.": return "HTTP_HEADER_LIMIT";
+                case "Ogiltigt HTTP-svar från läsaren.":
+                case "Ogiltigt HTTP-svar.": return "HTTP_FORMAT";
+                case "Avklippt HTTP-svar från läsaren.":
+                case "Avklippt läsarsvar.":
+                case "Avklippt HTTP-del från läsaren.": return "HTTP_TRUNCATED";
+                case "För stort läsarsvar.": return "HTTP_BODY_LIMIT";
+                case "För stort eller ogiltigt läsarsvar.": return "HTTP_CHUNK_FORMAT_OR_LIMIT";
+                case "Tom läsarfil.": return "EMPTY_BODY";
+                case "Läsarfilen är inte text.": return "BINARY_BODY";
+                case "Omdirigeringen är inte en tillåten lokal läsarfil.": return "REDIRECT_REJECTED";
+                case "Dubbelt omdirigeringsmål.": return "REDIRECT_AMBIGUOUS";
+                case "För många omdirigeringar.": return "REDIRECT_LIMIT";
+                case "Inga skript kunde hämtas. Webbgränssnittets kod behöver då sparas manuellt.": return "NO_SCRIPTS";
+                default: return error is InspectionLimitException ? "COLLECTION_LIMIT" : "UNCLASSIFIED";
+            }
+        }
         internal static string Collect(IPAddress remote, Func<string, byte[]> fetch, Action<string, byte[]> save, Func<long> clock,
             Func<string, string> resolved = null, Action<string> progress = null)
         {
@@ -300,6 +328,7 @@ namespace Tobtech.OmnikeyRco
             catch (Exception error)
             {
                 lines.Add("STOP_STAGE_" + stage);
+                lines.Add("ERROR_CODE_" + FailureCode(error));
                 lines.Add("ERROR_TYPE_" + error.GetType().FullName);
                 try { persist(); } catch (IOException) { } catch (UnauthorizedAccessException) { }
                 throw;

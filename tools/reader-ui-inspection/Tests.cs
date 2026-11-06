@@ -34,6 +34,8 @@ namespace Tobtech.OmnikeyRco
         public static int Run()
         {
             count = 0;
+            Check(ReaderSoundInspection.FailureCode(new InvalidDataException("synthetic-private-message")) == "UNCLASSIFIED", "Arbitrary exception text is never converted into report output");
+            Check(ReaderSoundInspection.FailureCode(new InvalidDataException("Oväntad HTTP-kodning från läsaren.")) == "HTTP_ENCODING", "Known HTTP failure classified without raw data");
             {
                 string next;
                 List<string> trace = new List<string>();
