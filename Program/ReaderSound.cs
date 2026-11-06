@@ -21,6 +21,7 @@
         public int TableLength { get; set; }
     }
     internal enum SoundTableCheck { Length, Flags }
+    [Serializable]
     internal sealed class SoundTableShape
     {
         internal readonly int Length;
