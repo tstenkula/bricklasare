@@ -82,4 +82,4 @@ Schema 2 för lokala Gen1-ljudkopior binder de fyra packade posterna till läsar
 
 Även omedelbar rollback kontrollerar att ljus, tider och repetitionsantal inte ändrats externt. Annars behålls journalen och de aktuella inställningarna. Återställning bevarar aktuell intern tabelldata. Moderna schema 1-kopior fortsätter fungera. Undvik samtidig redigering i webbgränssnittet när appen ändrar ljudet; läsaren erbjuder ingen atomisk jämför-och-skriv-operation.
 
-Protokollvägen och indexen är belagda i den insamlade koden. Den verkliga tabellens format och av/på-resultat måste fortfarande provas med fysisk läsare. Denna version förbereds därför som förhandsversion. Mac har ännu ingen verifierad läsväg för denna Gen1-tabell via CCID, så stödet aktiveras inte där.
+Protokollvägen och indexen är belagda i den insamlade koden. Den verkliga tabellens format och av/på-resultat måste fortfarande provas med fysisk läsare. Projektägaren har begärt att 3.6.5 publiceras som stabil trots det återstående hårdvaruprovet. Mac har ännu ingen verifierad läsväg för denna Gen1-tabell via CCID, så stödet aktiveras inte där.
