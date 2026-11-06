@@ -10,6 +10,8 @@ namespace Tobtech.OmnikeyRco
     using System.Text;
     using System.Text.RegularExpressions;
 
+    internal sealed class InspectionLimitException : Exception
+    { internal InspectionLimitException() : base("Insamlingens gräns har nåtts.") { } }
     public static class ReaderSoundInspection
     {
         private const int MaxRequests = 32, MaxTotal = 2097152;
@@ -186,13 +188,42 @@ namespace Tobtech.OmnikeyRco
             using (FileStream output = new FileStream(Path.Combine(directory, name), FileMode.CreateNew, FileAccess.Write, FileShare.None))
             { output.Write(bytes, 0, bytes.Length); output.Flush(true); }
         }
-        internal static string Collect(IPAddress remote, Func<string, byte[]> fetch, Action<string, byte[]> save, Func<long> clock)
+        internal static string FailureCode(Exception error)
+        {
+            // Only exact, locally defined messages become codes. Never print arbitrary
+            // exception text, response data, user input or a remote Location value.
+            switch (error.Message)
+            {
+                case "Ange läsarens lokala IPv4-adress.": return "ADDRESS_INVALID";
+                case "Läsaren svarade inte OK.": return "HTTP_STATUS";
+                case "Dubbelt HTTP-huvud.": return "HTTP_DUPLICATE_HEADER";
+                case "Ogiltigt HTTP-huvud.": return "HTTP_HEADER_INVALID";
+                case "Oväntad HTTP-kodning från läsaren.": return "HTTP_ENCODING";
+                case "För stort HTTP-huvud från läsaren.": return "HTTP_HEADER_LIMIT";
+                case "Ogiltigt HTTP-svar från läsaren.":
+                case "Ogiltigt HTTP-svar.": return "HTTP_FORMAT";
+                case "Avklippt HTTP-svar från läsaren.":
+                case "Avklippt läsarsvar.":
+                case "Avklippt HTTP-del från läsaren.": return "HTTP_TRUNCATED";
+                case "För stort läsarsvar.": return "HTTP_BODY_LIMIT";
+                case "För stort eller ogiltigt läsarsvar.": return "HTTP_CHUNK_FORMAT_OR_LIMIT";
+                case "Tom läsarfil.": return "EMPTY_BODY";
+                case "Läsarfilen är inte text.": return "BINARY_BODY";
+                case "Omdirigeringen är inte en tillåten lokal läsarfil.": return "REDIRECT_REJECTED";
+                case "Dubbelt omdirigeringsmål.": return "REDIRECT_AMBIGUOUS";
+                case "För många omdirigeringar.": return "REDIRECT_LIMIT";
+                case "Inga skript kunde hämtas. Webbgränssnittets kod behöver då sparas manuellt.": return "NO_SCRIPTS";
+                default: return error is InspectionLimitException ? "COLLECTION_LIMIT" : "UNCLASSIFIED";
+            }
+        }
+        internal static string Collect(IPAddress remote, Func<string, byte[]> fetch, Action<string, byte[]> save, Func<long> clock,
+            Func<string, string> resolved = null, Action<string> progress = null)
         {
             Queue<string> queue = new Queue<string>(); queue.Enqueue("/");
             HashSet<string> queued = new HashSet<string>(StringComparer.Ordinal) { "/" };
             HashSet<string> candidates = new HashSet<string>(StringComparer.Ordinal);
             List<string> report = new List<string> {
-                "BRICKLÄSAREN – UNDERLAG FÖR GEN1-LJUD, VERSION 1",
+                "BRICKLÄSAREN – UNDERLAG FÖR GEN1-LJUD, VERSION 2",
                 "Endast GET av startsida och script-/frame-/iframe-resurser via verifierad USB-anslutning.",
                 "Inga APDU-, formulär-, spara- eller återställningskommandon skickas. Ingen kod från läsaren körs.",
                 "HTML bearbetas i minnet; bara skript och rapport sparas. Granska lokala uppgifter före delning.",
@@ -204,8 +235,15 @@ namespace Tobtech.OmnikeyRco
                 string path = queue.Dequeue(); requests++;
                 byte[] bytes;
                 try { bytes = fetch(path); }
+                catch (InvalidDataException) { if (path == "/") throw; report.Add(path + " · ogiltigt filsvar; se kontroll.txt"); continue; }
                 catch (IOException) { if (path == "/") throw; report.Add(path + " · kunde inte hämtas"); continue; }
                 catch (SocketException) { if (path == "/") throw; report.Add(path + " · kunde inte hämtas"); continue; }
+                if (resolved != null)
+                {
+                    string finalPath = resolved(path);
+                    if (!ReaderNetwork.PublicFilePath(finalPath)) throw new InvalidDataException("Otillåten slutlig läsarfil.");
+                    path = finalPath;
+                }
                 if (clock() > 90000) throw new IOException("Insamlingen tog för lång tid. Eventuellt delunderlag ligger kvar lokalt.");
                 if (bytes == null || bytes.Length < 1 || bytes.Length > 262144 || bytes.Length > MaxTotal - total)
                     throw new InvalidDataException("För stort eller ogiltigt underlag.");
@@ -225,6 +263,7 @@ namespace Tobtech.OmnikeyRco
                 }
                 else
                 {
+                    if (progress != null) progress("SCRIPT_DISCOVERY");
                     InspectHtml(text, delegate(string source)
                     {
                         string next = ReferencePath(remote, path, source);
@@ -247,21 +286,53 @@ namespace Tobtech.OmnikeyRco
             }
             report.Add(""); report.Add("Filreferenser för manuell granskning (hämtas inte automatiskt):");
             foreach (string candidate in candidates.OrderBy(delegate(string p) { return p; })) report.Add(candidate);
-            report.Add(""); report.Add("Hämtade byte: " + total + ". Sparade skript: " + saved + ". Förfrågningar: " + requests + ".");
-            if (saved == 0) throw new InvalidDataException("Inga skript kunde hämtas. Webbgränssnittets kod behöver då sparas manuellt.");
+            report.Add(""); report.Add("Hämtade byte: " + total + ". Sparade skript: " + saved + ". Resursförsök: " + requests + ".");
             string result = String.Join("\r\n", report) + "\r\n";
             save("rapport.txt", new UTF8Encoding(false).GetBytes(result));
+            if (saved == 0)
+            {
+                if (progress != null) progress("NO_SCRIPTS");
+                throw new InvalidDataException("Inga skript kunde hämtas. Webbgränssnittets kod behöver då sparas manuellt.");
+            }
             return result;
         }
         public static string Run(string address, string directory)
         {
-            IPAddress remote;
-            if (!IPAddress.TryParse(address, out remote) || !ReaderNetwork.IsPrivate(remote)) throw new InvalidDataException("Ange läsarens lokala IPv4-adress.");
             if (Directory.Exists(directory) || File.Exists(directory)) throw new IOException("Välj en ny, tom mapp för underlaget.");
             Directory.CreateDirectory(directory);
             Stopwatch timer = Stopwatch.StartNew();
-            return Collect(remote, delegate(string path) { return ReaderNetwork.ReadPublicFile(remote, path); },
-                delegate(string name, byte[] data) { SaveText(directory, name, data); }, delegate { return timer.ElapsedMilliseconds; });
+            List<string> lines = new List<string> { "BRICKLÄSAREN – KONTROLL 2", "Endast arbetssteg, statuskoder och antal. Inga råsvar eller undantagsmeddelanden." };
+            string stage = "START"; int requests = 0;
+            Action persist = delegate {
+                using (FileStream file = new FileStream(Path.Combine(directory, "kontroll.txt"), FileMode.Create, FileAccess.Write, FileShare.Read))
+                { byte[] data = new UTF8Encoding(false).GetBytes(String.Join("\r\n", lines) + "\r\n"); file.Write(data, 0, data.Length); file.Flush(true); }
+            };
+            Action<string> trace = delegate(string step) {
+                stage = step; lines.Add(step); persist();
+                if (step == "REQUEST_VALIDATION" && ++requests > MaxRequests) throw new InspectionLimitException();
+                if (timer.ElapsedMilliseconds > 90000) throw new InspectionLimitException();
+            };
+            persist();
+            try
+            {
+                trace("ADDRESS_VALIDATION");
+                IPAddress remote;
+                if (!IPAddress.TryParse(address, out remote) || !ReaderNetwork.IsPrivate(remote)) throw new InvalidDataException("Ange läsarens lokala IPv4-adress.");
+                Dictionary<string, string> paths = new Dictionary<string, string>();
+                string result = Collect(remote, delegate(string path) {
+                    return ReaderNetwork.ReadPublicFile(remote, path, trace, delegate(string finalPath) { paths[path] = finalPath; });
+                }, delegate(string name, byte[] data) { SaveText(directory, name, data); }, delegate { return timer.ElapsedMilliseconds; },
+                    delegate(string path) { return paths[path]; }, trace);
+                trace("COMPLETE"); return result;
+            }
+            catch (Exception error)
+            {
+                lines.Add("STOP_STAGE_" + stage);
+                lines.Add("ERROR_CODE_" + FailureCode(error));
+                lines.Add("ERROR_TYPE_" + error.GetType().FullName);
+                try { persist(); } catch (IOException) { } catch (UnauthorizedAccessException) { }
+                throw;
+            }
         }
     }
 }

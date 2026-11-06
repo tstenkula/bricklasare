@@ -34,6 +34,40 @@ namespace Tobtech.OmnikeyRco
         public static int Run()
         {
             count = 0;
+            Check(ReaderSoundInspection.FailureCode(new InvalidDataException("synthetic-private-message")) == "UNCLASSIFIED", "Arbitrary exception text is never converted into report output");
+            Check(ReaderSoundInspection.FailureCode(new InvalidDataException("Oväntad HTTP-kodning från läsaren.")) == "HTTP_ENCODING", "Known HTTP failure classified without raw data");
+            {
+                string next;
+                List<string> trace = new List<string>();
+                using (MemoryStream stream = new MemoryStream(Bytes("HTTP/1.0 302 Found\r\nLocation: /ui/index.htm\r\n\r\n")))
+                    Check(ReaderNetwork.InspectPublicResponse(stream, delegate { return false; }, Address, "/", trace.Add, out next) == null && next == "/ui/index.htm", "Same-reader static redirect accepted without executing code");
+                Check(trace.Contains("HTTP_STATUS_302") && trace.Contains("LOCAL_STATIC_REDIRECT"), "HTTP status and redirect traced without raw headers");
+                foreach (string location in new[] { "http://other.invalid/a.htm", "/cjax", "/save.htm?cmd=1", "//other.invalid/a.js", "/a%2Ehtm", "http://192.168.63.98/index.htm" })
+                    Reject(delegate { using (MemoryStream stream = new MemoryStream(Bytes("HTTP/1.0 302 Found\r\nLocation: " + location + "\r\n\r\n"))) ReaderNetwork.InspectPublicResponse(stream, delegate { return false; }, Address, "/", delegate { }, out next); }, "Redirect cannot escape fixed USB reader or navigate command/query endpoints");
+                using (MemoryStream stream = new MemoryStream(Bytes("HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n3\r\nabc\r\n0\r\n\r\n")))
+                    Check(ReaderNetwork.InspectPublicResponse(stream, delegate { return false; }, Address, "/", trace.Add, out next).SequenceEqual(Bytes("abc")) && next == null, "Header replay preserves strict bounded chunk parser");
+                int calls = 0;
+                Reject(delegate { ReaderNetwork.FollowStaticRedirects("/", delegate(string path, out string target) { calls++; target = "/index.htm"; return null; }, delegate { }); }, "Redirect loops are bounded");
+                Check(calls == 4, "At most initial request plus three redirects");
+                string final = null;
+                byte[] result = ReaderNetwork.FollowStaticRedirects("/", delegate(string path, out string target) { target = path == "/" ? "/ui/index.htm" : null; return target == null ? Bytes("ok") : null; }, delegate(string path) { final = path; });
+                Check(final == "/ui/index.htm" && result.SequenceEqual(Bytes("ok")), "Final resource path is retained for relative references");
+                List<string> fetched = new List<string>(); Dictionary<string, byte[]> saved = new Dictionary<string, byte[]>();
+                ReaderSoundInspection.Collect(Address, delegate(string path) { fetched.Add(path); return Bytes(path == "/" ? "<script src='reader.js'></script>" : "var code=1;"); }, delegate(string name, byte[] b) { saved.Add(name, b); }, delegate { return 0; }, delegate(string path) { return path == "/" ? "/ui/index.htm" : path; });
+                Check(fetched.SequenceEqual(new[] { "/", "/ui/reader.js" }), "Redirected page resolves relative script against final directory");
+                saved.Clear();
+                Reject(delegate { ReaderSoundInspection.Collect(Address, delegate { return Bytes("<body>No scripts</body>"); }, delegate(string name, byte[] b) { saved.Add(name, b); }, delegate { return 0; }); }, "No scripts remains a failure");
+                Check(saved.ContainsKey("rapport.txt"), "No-script failure still saves report");
+                string folder = Path.Combine(Path.GetTempPath(), "bricklasare-inspection-test-" + Guid.NewGuid().ToString("N"));
+                try {
+                    Reject(delegate { ReaderSoundInspection.Run("synthetic-private-value", folder); }, "Invalid address fails before network");
+                    string log = File.ReadAllText(Path.Combine(folder, "kontroll.txt"));
+                    Check(log.Contains("STOP_STAGE_ADDRESS_VALIDATION") && log.Contains("ERROR_TYPE_System.IO.InvalidDataException") && !log.Contains("synthetic-private-value"), "Failure checkpoint exists without private input or exception message");
+                } finally { if (Directory.Exists(folder)) Directory.Delete(folder, true); }
+                fetched.Clear(); saved.Clear();
+                ReaderSoundInspection.Collect(Address, delegate(string path) { fetched.Add(path); if (path == "/bad.js") throw new InvalidDataException(); return Bytes(path == "/" ? "<script src='bad.js'></script><script src='good.js'></script>" : "var good=1;"); }, delegate(string name, byte[] b) { saved.Add(name, b); }, delegate { return 0; });
+                Check(saved.Count == 2 && fetched.Count == 3, "Malformed optional resource does not discard other available scripts");
+            }
             foreach (string path in new[] { "/", "/index.html", "/led.htm", "/js/reader.js", "/jquery.min.js", "/scripts/prototype-1.6.0.js" })
             {
                 Check(ReaderNetwork.PublicFilePath(path), "Literal resource accepted");

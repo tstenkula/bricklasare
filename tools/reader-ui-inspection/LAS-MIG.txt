@@ -1,4 +1,4 @@
-BRICKLÄSAREN – UNDERLAG FÖR GEN1-LJUD, VERSION 1
+BRICKLÄSAREN – UNDERLAG FÖR GEN1-LJUD, VERSION 2
 
 Detta separata verktyg samlar kod från OMNIKEY 5427 CK:s inbyggda
 webbgränssnitt för att kunna undersöka hur Gen1 läser ljudinställningar.
@@ -18,10 +18,17 @@ hämtas med GET. Övriga filreferenser listas för manuell granskning.
 Trafiken binds till den verifierade OMNIKEY USB-nätverksanslutningen.
 Wi-Fi, LAN och VPN används inte som reservväg. Inga APDU-kommandon,
 formulär, spara-, provpip-, omstarts- eller återställningskommandon skickas.
-Omdirigeringar, externa länkar och länkar med parametrar följs inte.
+Statiska omdirigeringar följs bara inom samma läsare, högst tre gånger.
+Externa länkar, kommandosökvägar och länkar med parametrar följs inte.
 Kod från webbgränssnittet körs aldrig. HTML-sidor bearbetas i minnet;
 endast skript och rapport sparas. Tydliga HTML-felsidor som returneras
 i stället för skript hoppas över. Skripten kan ändå innehålla lokala uppgifter.
+
+kontroll.txt skapas innan nätverksläsningen börjar och uppdateras löpande
+med arbetssteg och HTTP-status. Den innehåller inga råsvar eller
+undantagsmeddelanden. Rapport och ZIP skapas också vid misslyckad
+insamling om mappen är skrivbar. Saknade skript är ett insamlingsfel,
+inte i sig ett bevis på saknad USB-kontakt.
 
 Skripten sparas som textfiler tillsammans med rapport.txt under:
 %LOCALAPPDATA%\Tobtech\Omnikey-RCO-v2\ljudunderlag-...
@@ -32,7 +39,8 @@ Granska före delning. Lägg inte underlaget i ett publikt repo eller issue.
 Verktyget exporterar inte en full konfigurationsbackup, och underlaget
 kan inte användas för att återställa firmware eller inställningar.
 
-Standardadressen är 192.168.63.99. Om läsaren använder annan adress kan IT
+Den sparade läsaradressen i appens reception.json används om den finns.
+Annars används 192.168.63.99. Om läsaren använder annan adress kan IT
 köra Samla-ljudunderlag.ps1 -Address följt av läsarens lokala IPv4-adress.
 Administratorbehörighet behövs inte. Verktyget ändrar inte Windows
 säkerhetsinställningar eller PowerShell-policy.
