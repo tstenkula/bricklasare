@@ -2,7 +2,7 @@
 param([Parameter(Mandatory=$true)][string]$Plan, [switch]$VerifyPackageOnly)
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
-$CurrentVersion = '3.6.6'
+$CurrentVersion = '3.6.7'
 $PublicKey = '<RSAKeyValue><Modulus>n8JTA0cbbRrraGNb11fX4Dyanoa8S9TzTBGl8Edfagx743HROUj9lDCwJvuVF6cNpH4mB2dN33O+XfYKZMrUaJ0K/3Q9gmPLqedlvbpuHWlEaeUzekdT4Npo7EZpwo+Cwcxjlmlahgoll1MkjEu8QERzAQEeuTB4vZCsKdXdYcRlKAQuPEKqCWkiH49prMDvVdqUUYLl2TPLcHPD8MDdkbFh/glWJDTRB1No++PCUU8PVG80X94BnMe1E/+LLyTjxaNYVSsIFZlD9XX3eup7t/UTKUk9RC1u8WY23l74ccXwy71lirntfOFW6MdK4kFsIGOk+2PF/QGwoIcpwfhSt7+Id0y85VGEqe002CngsfxUQ7BkAAAB2+D4vPcU3FBLkleYkG5B+WXasbCslTGFXG+hnFpTU2R5XQECRJ2UXjuJN/lDaw8AE7dwUTTfibfYGs9mAUZ6nECBsL3OmpXtCK9ZyTHx2AWs+hvXP+7hzcluf12K2H4MveyyNcOFSNed</Modulus><Exponent>AQAB</Exponent></RSAKeyValue>'
 $backup = $null
 $mutex = $null
@@ -34,6 +34,57 @@ function Assert-PlainPath([string]$Path) {
         $part = [IO.Path]::GetDirectoryName($part.TrimEnd('\'))
     }
 }
+# Opaque byte snapshots: JSON is never parsed, repaired, renamed or uploaded.
+function Assert-UpdateStorage([string]$Program, [string]$Data) {
+    $a = [IO.Path]::GetFullPath($Program).TrimEnd('\') + '\'
+    $b = [IO.Path]::GetFullPath($Data).TrimEnd('\') + '\'
+    if ($a.StartsWith($b, [StringComparison]::OrdinalIgnoreCase) -or $b.StartsWith($a, [StringComparison]::OrdinalIgnoreCase)) { throw 'Program and settings must be separate' }
+}
+function Get-UpdateSettingsSnapshot([string]$Directory) {
+    Assert-PlainPath $Directory
+    $files = @(Get-ChildItem -LiteralPath $Directory -Force | Where-Object { $_.Name.EndsWith('.json', [StringComparison]::OrdinalIgnoreCase) })
+    if ($files.Count -gt 256) { throw 'Too many settings files' }
+    $snapshot = @{}; [long]$total = 0
+    foreach ($file in $files) {
+        if ($file.PSIsContainer -or ($file.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) { throw 'Linked or invalid settings file' }
+        $settingsStream = [IO.File]::Open($file.FullName, [IO.FileMode]::Open, [IO.FileAccess]::Read, [IO.FileShare]::Read)
+        try {
+            if ($settingsStream.Length -gt 65536) { throw 'Settings file too large' }
+            $bytes = New-Object byte[] ([int]$settingsStream.Length); $offset = 0
+            while ($offset -lt $bytes.Length) {
+                $n = $settingsStream.Read($bytes, $offset, $bytes.Length - $offset)
+                if ($n -le 0) { throw 'Truncated settings file' }; $offset += $n
+            }
+            if ($settingsStream.ReadByte() -ne -1) { throw 'Settings file changed' }
+            $total += $bytes.Length
+            if ($total -gt 2097152) { throw 'Settings snapshot too large' }
+            $snapshot[$file.Name] = $bytes
+        } finally { $settingsStream.Dispose() }
+    }
+    return $snapshot
+}
+function Assert-UpdateSettingsSnapshot([string]$Directory, [hashtable]$Expected) {
+    $current = Get-UpdateSettingsSnapshot $Directory
+    if ($current.Count -ne $Expected.Count) { throw 'Settings changed during installation' }
+    foreach ($name in $Expected.Keys) {
+        if (-not $current.ContainsKey($name) -or [Convert]::ToBase64String($current[$name]) -cne [Convert]::ToBase64String($Expected[$name])) { throw 'Settings changed during installation' }
+    }
+}
+function Save-UpdateSettingsSnapshot([string]$Directory, [string]$JobDirectory) {
+    $snapshot = Get-UpdateSettingsSnapshot $Directory
+    $destination = Join-Path $JobDirectory 'preserved-settings'
+    if (Test-Path -LiteralPath $destination) { throw 'Settings backup already exists' }
+    [void][IO.Directory]::CreateDirectory($destination)
+    Assert-PlainPath $destination
+    foreach ($name in $snapshot.Keys) {
+        $output = [IO.File]::Open((Join-Path $destination $name), [IO.FileMode]::CreateNew, [IO.FileAccess]::Write, [IO.FileShare]::None)
+        try { $bytes = $snapshot[$name]; $output.Write($bytes, 0, $bytes.Length); $output.Flush($true) } finally { $output.Dispose() }
+    }
+    Assert-UpdateSettingsSnapshot $destination $snapshot
+    Assert-UpdateSettingsSnapshot $Directory $snapshot
+    return $snapshot
+}
+
 function Get-SignedAsset([byte[]]$Envelope, [string]$Channel) {
     if ($Channel -notin @('stable', 'preview')) { throw 'Invalid update channel' }
     $lines = [Text.Encoding]::UTF8.GetString($Envelope).TrimEnd([char[]]"`r`n").Split([char]"`n")
@@ -80,12 +131,15 @@ try {
     $target = [IO.Path]::GetFullPath($job.Target).TrimEnd('\')
     if ($target -eq [IO.Path]::GetPathRoot($target) -or -not (Test-Path -LiteralPath (Join-Path $target 'Program\Entry.cs') -PathType Leaf)) { throw 'Invalid update target' }
     Assert-PlainPath $target
+    Assert-UpdateStorage $target $dataRoot
     $parent = Get-Process -Id $job.ParentId -ErrorAction SilentlyContinue
     if ($null -ne $parent -and -not $parent.WaitForExit(120000)) { throw 'Application is still running' }
     $mutex = New-Object Threading.Mutex($false, 'Local\Tobtech.OmnikeyRcoV2')
     try { $locked = $mutex.WaitOne(0) } catch [Threading.AbandonedMutexException] { $locked = $true }
     if (-not $locked) { throw 'Another application is running' }
-    if (@(Get-ChildItem -LiteralPath $dataRoot -File | Where-Object { $_.Name -like 'aterstall-*.json' -or $_.Name -like 'usb-pending-*.json' }).Count -gt 0) { throw 'Reader recovery is pending' }
+    # The app has exited and its exclusive mutex is held. Preserve all settings,
+    # including journals for this or other readers, before running the new self-test.
+    $preservedSettings = Save-UpdateSettingsSnapshot $dataRoot $jobRoot
     # Extract into a fresh sibling on the target volume. Prepared loose files are never trusted.
     $candidate = $target + '.new-' + [Guid]::NewGuid().ToString('N')
     [void][IO.Directory]::CreateDirectory($candidate)
@@ -106,16 +160,16 @@ try {
         $destination = Join-Path $candidate ($name.Replace('/', '\'))
         if ($name.EndsWith('/')) { [void][IO.Directory]::CreateDirectory($destination); continue }
         [void][IO.Directory]::CreateDirectory([IO.Path]::GetDirectoryName($destination))
-        $inputStream = $entry.Open()
+        $settingsStreamStream = $entry.Open()
         $outputStream = [IO.File]::Open($destination, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write, [IO.FileShare]::None)
         try {
             $buffer = New-Object byte[] 32768
-            while (($count = $inputStream.Read($buffer, 0, $buffer.Length)) -gt 0) {
+            while (($count = $settingsStreamStream.Read($buffer, 0, $buffer.Length)) -gt 0) {
                 if ($outputStream.Length + $count -gt $entry.Length) { throw 'Invalid expanded size' }
                 $outputStream.Write($buffer, 0, $count)
             }
             if ($outputStream.Length -ne $entry.Length) { throw 'Truncated archive entry' }
-        } finally { $outputStream.Dispose(); $inputStream.Dispose() }
+        } finally { $outputStream.Dispose(); $settingsStreamStream.Dispose() }
     }
     $zip.Dispose(); $zip = $null
     $memory.Dispose(); $memory = $null
@@ -127,10 +181,12 @@ try {
     if ($test.ExitCode -ne 0) { throw 'New version self-test failed' }
     Assert-PlainPath $target
     Assert-PlainPath $candidate
+    Assert-UpdateSettingsSnapshot $dataRoot $preservedSettings
     $backup = $target + '.previous-' + [Guid]::NewGuid().ToString('N')
     [IO.Directory]::Move($target, $backup)
     try { [IO.Directory]::Move($candidate, $target); $candidate = $null }
     catch { [IO.Directory]::Move($backup, $target); $backup = $null; throw }
+    Assert-UpdateSettingsSnapshot $dataRoot $preservedSettings
     $mutex.ReleaseMutex(); $locked = $false
     Start-Process -FilePath (Join-Path $target 'Starta-Bricklasaren.cmd') -WorkingDirectory $target
     [IO.File]::WriteAllText((Join-Path $dataRoot 'uppdatering-status.txt'), 'Uppdatering installerad. Tidigare programmapp finns kvar som .previous-kopia.')

@@ -154,7 +154,7 @@ final class UpdateDownload: NSObject, URLSessionDataDelegate {
   }
 }
 enum Updates {
-  static let current = "3.6.6"
+  static let current = "3.6.7"
   static let publicKey =
     "MIIBigKCAYEAn8JTA0cbbRrraGNb11fX4Dyanoa8S9TzTBGl8Edfagx743HROUj9lDCwJvuVF6cNpH4mB2dN33O+XfYKZMrUaJ0K/3Q9gmPLqedlvbpuHWlEaeUzekdT4Npo7EZpwo+Cwcxjlmlahgoll1MkjEu8QERzAQEeuTB4vZCsKdXdYcRlKAQuPEKqCWkiH49prMDvVdqUUYLl2TPLcHPD8MDdkbFh/glWJDTRB1No++PCUU8PVG80X94BnMe1E/+LLyTjxaNYVSsIFZlD9XX3eup7t/UTKUk9RC1u8WY23l74ccXwy71lirntfOFW6MdK4kFsIGOk+2PF/QGwoIcpwfhSt7+Id0y85VGEqe002CngsfxUQ7BkAAAB2+D4vPcU3FBLkleYkG5B+WXasbCslTGFXG+hnFpTU2R5XQECRJ2UXjuJN/lDaw8AE7dwUTTfibfYGs9mAUZ6nECBsL3OmpXtCK9ZyTHx2AWs+hvXP+7hzcluf12K2H4MveyyNcOFSNedAgMBAAE="
   static let unavailable =
@@ -233,7 +233,7 @@ enum Updates {
       "Uppdateringen är inte nyare än den installerade versionen.")
     return signed
   }
-  static func readRegular(_ url: URL, maximum: Int) throws -> Data {
+  static func readRegular(_ url: URL, maximum: Int, allowEmpty: Bool = false) throws -> Data {
     let fd = open(url.path, O_RDONLY | O_NOFOLLOW | O_CLOEXEC)
     try require(fd >= 0, "Uppdateringsfilen kunde inte öppnas.")
     let handle = FileHandle(fileDescriptor: fd, closeOnDealloc: true)
@@ -241,10 +241,10 @@ enum Updates {
     var info = stat()
     try require(
       fstat(fd, &info) == 0 && (info.st_mode & S_IFMT) == S_IFREG
-        && info.st_size > 0 && info.st_size <= maximum,
+        && info.st_size >= (allowEmpty ? 0 : 1) && info.st_size <= maximum,
       "Uppdateringsfilen är ogiltig eller för stor.")
     let bytes = try handle.read(upToCount: maximum + 1) ?? Data()
-    try require(!bytes.isEmpty && bytes.count <= maximum, "Uppdateringsfilen är för stor.")
+    try require((allowEmpty || !bytes.isEmpty) && bytes.count <= maximum, "Uppdateringsfilen är för stor.")
     return bytes
   }
   // Both the final installer and its regression tests use this exact trust boundary.
@@ -257,6 +257,49 @@ enum Updates {
     let bytes = try readRegular(directory.appendingPathComponent("package.zip"), maximum: 52_428_800)
     try verify(bytes, asset: asset)
     return (asset, bytes)
+  }
+  static func separateStorage(_ program: URL, _ data: URL) -> Bool {
+    let a = program.standardizedFileURL.path + "/"
+    let b = data.standardizedFileURL.path + "/"
+    return !a.hasPrefix(b) && !b.hasPrefix(a)
+  }
+  // Opaque local JSON bytes, including pending recovery for any reader. Never
+  // parse, repair or upload settings while replacing application files.
+  static func settingsSnapshot(_ root: URL) throws -> [String: Data] {
+    try require(root.resolvingSymlinksInPath() == root.standardizedFileURL,
+                "Inställningsmappen får inte vara en länk.")
+    let files = try FileManager.default.contentsOfDirectory(at: root, includingPropertiesForKeys: nil)
+      .filter { $0.pathExtension.lowercased() == "json" }
+    try require(files.count <= 256, "För många inställningsfiler för säkerhetskopian.")
+    var result: [String: Data] = [:], total = 0
+    for file in files {
+      let bytes = try readRegular(file, maximum: 65536, allowEmpty: true)
+      total += bytes.count
+      try require(total <= 2_097_152, "Inställningskopian är för stor.")
+      result[file.lastPathComponent] = bytes
+    }
+    return result
+  }
+  static func assertSettings(_ root: URL, equal expected: [String: Data]) throws {
+    try require(try settingsSnapshot(root) == expected,
+                "Inställningarna har ändrats under installationen. Kopian har behållits.")
+  }
+  static func preserveSettings(_ root: URL, in directory: URL) throws -> [String: Data] {
+    let bytes = try settingsSnapshot(root)
+    let backup = directory.appendingPathComponent("preserved-settings")
+    try FileManager.default.createDirectory(at: backup, withIntermediateDirectories: false,
+                                           attributes: [.posixPermissions: 0o700])
+    for (name, data) in bytes {
+      let file = backup.appendingPathComponent(name)
+      try data.write(to: file, options: [.withoutOverwriting])
+      try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: file.path)
+      let handle = try FileHandle(forWritingTo: file)
+      defer { try? handle.close() }
+      try handle.synchronize()
+    }
+    try assertSettings(backup, equal: bytes)
+    try assertSettings(root, equal: bytes)
+    return bytes
   }
   static func pending(_ store: Store) -> Bool {
     store.files().contains {
@@ -375,8 +418,8 @@ enum Updates {
   static func stage(_ offered: UpdateAsset, store: Store,
                     progress: ((UpdateProgress) -> Void)? = nil) throws -> URL {
     let asset = try authenticated(offered)
-    try require(!pending(store), "Återställ läsaren innan programmet uppdateras.")
     let target = Bundle.main.bundleURL.standardizedFileURL
+    try require(separateStorage(target, store.root), "Programmet och inställningarna måste ligga i separata mappar.")
     try require(
       target.pathExtension == "app" && !target.path.hasPrefix("/Volumes/")
         && FileManager.default.isWritableFile(atPath: target.deletingLastPathComponent().path),
@@ -420,7 +463,8 @@ enum Updates {
         && directory.resolvingSymlinksInPath() == directory.standardizedFileURL
         && target.resolvingSymlinksInPath() == target.standardizedFileURL
         && ["stable", "preview"].contains(plan.channel) && plan.parent > 1
-        && target.pathExtension == "app" && !target.path.hasPrefix("/Volumes/"),
+        && target.pathExtension == "app" && !target.path.hasPrefix("/Volumes/")
+        && separateStorage(target, store.root),
       "Ogiltig uppdateringsplan.")
     let deadline = Date().addingTimeInterval(120)
     while kill(plan.parent, 0) == 0 {
@@ -434,8 +478,8 @@ enum Updates {
       close(lock)
     }
     try require(
-      flock(lock, LOCK_EX | LOCK_NB) == 0 && !pending(store),
-      "Programmet används eller läsaren behöver återställas.")
+      flock(lock, LOCK_EX | LOCK_NB) == 0, "Programmet används fortfarande.")
+    let preservedSettings = try preserveSettings(store.root, in: directory)
     let archive = directory.appendingPathComponent("package.zip")
     let (asset, bytes) = try installPackage(directory, channel: plan.channel)
     try validateZip(bytes)
@@ -460,7 +504,9 @@ enum Updates {
     try fm.copyItem(at: candidate, to: sibling)
     let backup = target.deletingLastPathComponent().appendingPathComponent(
       "Bricklasaren.previous-" + UUID().uuidString + ".app")
+    try assertSettings(store.root, equal: preservedSettings)
     try replace(target: target, candidate: sibling, backup: backup)
+    try assertSettings(store.root, equal: preservedSettings)
     flock(lock, LOCK_UN)
     try run("/usr/bin/open", ["-n", "-a", target.path])
     try store.writeData(
@@ -528,10 +574,6 @@ extension AppController {
   }
   func offerUpdate(_ asset: UpdateAsset) {
     guard !busy else { return }
-    if Updates.pending(store) {
-      showError(fail("RECOVERY", "Återställ läsaren innan du uppdaterar."))
-      return
-    }
     let alert = NSAlert()
     alert.messageText = "Uppdatera till \(asset.Version)?"
     alert.informativeText =
@@ -555,7 +597,6 @@ extension AppController {
             self?.showUpdateProgress(progress, operation: operation)
           }
         }
-        try require(!Updates.pending(self.store), "Återställning väntar.")
         let helper = Process()
         helper.executableURL = plan.deletingLastPathComponent().appendingPathComponent("installer")
         helper.arguments = ["--install-update", plan.path]
@@ -581,7 +622,6 @@ extension AppController {
     // A modal alert runs a nested event loop. Recheck ownership after the answer,
     // before scheduling work or changing another reader operation's busy state.
     guard !busy, updateOperation == nil, asset.channel == workflow.channel else { return false }
-    try require(!Updates.pending(store), "Återställ läsaren innan du uppdaterar.", code: "RECOVERY")
     busy = true
     let operation = UUID()
     updateOperation = operation

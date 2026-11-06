@@ -43,7 +43,7 @@ jobs:
       - name: Compile and run offline self-tests
         shell: powershell
         env:
-          BRICKLASARE_TEST_ARCHIVE: ${{ github.workspace }}\dist\Bricklasaren-3.6.6-Windows.zip
+          BRICKLASARE_TEST_ARCHIVE: ${{ github.workspace }}\dist\Bricklasaren-3.6.7-Windows.zip
           BRICKLASARE_TEST_IMAGES: ${{ runner.temp }}\bricklasare-ui
         run: |
           & .\Program\Starta-Bricklasaren.ps1 -SelfTestOnly
@@ -81,7 +81,7 @@ jobs:
           name: windows-interface
           path: |
             ${{ runner.temp }}\bricklasare-ui
-            dist/Bricklasaren-3.6.6-Windows.zip
+            dist/Bricklasaren-3.6.7-Windows.zip
           if-no-files-found: ignore
           retention-days: 3
 
@@ -91,4 +91,26 @@ jobs:
           name: gen1-sound-inspection
           path: dist/Bricklasaren-Gen1-ljudunderlag-4-Windows.zip
           if-no-files-found: error
+          retention-days: 3
+
+  recovery-update:
+    name: Recovery-preserving Windows update
+    if: github.repository == 'tstenkula/bricklasare' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == 'tstenkula/bricklasare')
+    runs-on: windows-2022
+    timeout-minutes: 12
+    steps:
+      - name: Check out recovery installer
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install public packages with saved recovery on a fresh VM
+        shell: powershell
+        run: tools/test-published-update.ps1 -Case stable-3.6.6 -UseCurrentRecoveryHelper -InstallOnDisposableRunner -OutputDirectory '${{ runner.temp }}\recovery-update-report'
+      - name: Retain recovery-preserving installer evidence
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: recovery-preserving-update
+          path: ${{ runner.temp }}\recovery-update-report
+          if-no-files-found: warn
           retention-days: 3

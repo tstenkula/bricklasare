@@ -83,7 +83,7 @@ extension SelfTests {
     try rejects("Non-ZIP rejected") { try Updates.validateZip(Data(repeating: 0, count: 40)) }
     try check(!Updates.pending(store), "Clean user store permits updates")
     try store.writeData("aterstall-test.json", Data("pending".utf8))
-    try check(Updates.pending(store), "Recovery journal blocks installation")
+    try check(Updates.pending(store), "Saved recovery remains detectable for diagnosis")
     try store.remove("aterstall-test.json")
     try check(
       !WorkflowSettings().sounds && WorkflowSettings().copy == 0, "Clipboard and sounds opt in")
@@ -93,6 +93,40 @@ extension SelfTests {
     try check(
       WorkflowSettings(copy: 2).copyValue(("123", ""), combo: false) == nil,
       "Absent second output is not copied")
+    let snapshotRoot = store.url("settings-snapshot-tests")
+    let settingsRoot = snapshotRoot.appendingPathComponent("data")
+    let jobRoot = snapshotRoot.appendingPathComponent("job")
+    let fm = FileManager.default
+    try fm.createDirectory(at: settingsRoot, withIntermediateDirectories: true)
+    try fm.createDirectory(at: jobRoot, withIntermediateDirectories: false)
+    let records = ["aterstall-other.json": Data("opaque interrupted scan".utf8),
+                   "usb-pending-old.json": Data("opaque USB transition".utf8),
+                   "lasarljud-old.json": Data("opaque sound recovery".utf8),
+                   "formatval.json": Data(), "invalid.JSON": Data([0xff, 0x00])]
+    for (name, bytes) in records { try bytes.write(to: settingsRoot.appendingPathComponent(name)) }
+    let saved = try Updates.preserveSettings(settingsRoot, in: jobRoot)
+    try check(saved == records && (try Updates.settingsSnapshot(settingsRoot)) == records,
+      "Installer copies all opaque settings, including empty/corrupt records, without changing originals")
+    try Updates.assertSettings(jobRoot.appendingPathComponent("preserved-settings"), equal: records)
+    try Data("external edit".utf8).write(to: settingsRoot.appendingPathComponent("aterstall-other.json"))
+    try rejects("External settings edits abort replacement instead of being overwritten") {
+      try Updates.assertSettings(settingsRoot, equal: saved)
+    }
+    try check(try Updates.settingsSnapshot(jobRoot.appendingPathComponent("preserved-settings")) == records,
+      "Original settings backup remains intact after an external edit")
+    try rejects("An existing snapshot is never overwritten") { _ = try Updates.preserveSettings(settingsRoot, in: jobRoot) }
+    let linkedSettings = settingsRoot.appendingPathComponent("linked.json")
+    try fm.createSymbolicLink(at: linkedSettings, withDestinationURL: settingsRoot.appendingPathComponent("formatval.json"))
+    try rejects("Linked JSON settings are never followed by the installer") { _ = try Updates.settingsSnapshot(settingsRoot) }
+    try fm.removeItem(at: linkedSettings)
+    let large = settingsRoot.appendingPathComponent("oversized.json")
+    try Data(repeating: 65, count: 65537).write(to: large)
+    try rejects("Settings copy bounds every file") { _ = try Updates.settingsSnapshot(settingsRoot) }
+    try check(!Updates.separateStorage(settingsRoot, settingsRoot)
+      && !Updates.separateStorage(snapshotRoot, settingsRoot)
+      && !Updates.separateStorage(settingsRoot, snapshotRoot)
+      && Updates.separateStorage(settingsRoot, jobRoot), "Program replacement cannot include the settings folder")
+    try fm.removeItem(at: snapshotRoot)
     let controller = AppController(store: store, preview: true)
     controller.makeWindow()
     controller.workflow.channel = "preview"
@@ -117,11 +151,11 @@ extension SelfTests {
       && controller.outputs?.0 == "123", "Changed channel invalidates a previously offered update")
     controller.workflow.channel = "preview"
     try store.writeData("aterstall-confirmation-test.json", Data("pending".utf8))
-    try rejects("Recovery started during confirmation blocks update acquisition") {
-      _ = try controller.beginConfirmedUpdate(asset)
-    }
-    try check(!controller.busy && controller.outputs?.0 == "123",
-      "New recovery journal blocks staging before UI state is changed")
+    try check(try controller.beginConfirmedUpdate(asset) && controller.busy,
+      "Saved recovery permits an idle update")
+    try check(try Data(contentsOf: store.url("aterstall-confirmation-test.json")) == Data("pending".utf8),
+      "Update acquisition preserves the saved recovery bytes")
+    _ = controller.finishUpdateOperation(controller.updateOperation!)
     try store.remove("aterstall-confirmation-test.json")
     controller.info = nil
     controller.reconnectPending = true
