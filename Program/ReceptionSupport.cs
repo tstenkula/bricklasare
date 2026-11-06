@@ -1,4 +1,4 @@
-﻿// Reception v3.6.5 (PowerShell). Reader protocol remains in OmnikeyCore.cs.
+﻿// Reception v3.6.6 (PowerShell). Reader protocol remains in OmnikeyCore.cs.
 namespace Tobtech.OmnikeyRco
 {
     using System;
@@ -70,6 +70,7 @@ namespace Tobtech.OmnikeyRco
                 case "USB-konfigurationsfilen är för stor.": return "USB_STATE_SIZE";
                 case "USB-konfigurationsfilen kunde inte läsas.": return "USB_STATE_JSON";
                 case "Läsarens ljudformat stöds inte.": return "SOUND_TABLE_FORMAT";
+                case "Gen1-läsarens ljudformat stöds inte.": return "SOUND_GEN1_FORMAT";
                 case "Läsaren kunde inte lämna sitt ljudläge.": return "SOUND_TABLE_TYPE";
                 case "Den sparade ljudinställningen är ogiltig.": return "SOUND_BACKUP_SIZE";
                 case "Ljudinställningen gäller inte den här läsaren och firmware.": return "SOUND_BACKUP_IDENTITY";
@@ -325,6 +326,13 @@ namespace Tobtech.OmnikeyRco
                 UsbModeShape shape = current.Data["Tobtech.UsbModeShape"] as UsbModeShape;
                 if (code == "USB_MODE_RESPONSE" && shape != null) text.Append(" [USB-format ").Append(shape.Type)
                     .Append("; längd ").Append(shape.Length).Append("; värde ").Append(shape.Value).Append("]");
+                SoundTableShape sound = current.Data["Tobtech.SoundTableShape"] as SoundTableShape;
+                if (code == "SOUND_GEN1_FORMAT" && sound != null)
+                {
+                    text.Append(" [ljudformat Gen1; byte ").Append(sound.Length).Append("; kontroll ").Append(sound.Check);
+                    if (sound.Check == SoundTableCheck.Flags) text.Append("; sekvens ").Append(sound.Sequence).Append("; steg ").Append(sound.Step);
+                    text.Append("]");
+                }
                 ReaderMibException mib = current as ReaderMibException;
                 if (mib != null) text.Append(" [kommando ").Append(mib.Command).Append("; MIB-status ")
                     .Append(mib.Status).Append("; index ").Append(mib.Index).Append("]");
@@ -349,10 +357,10 @@ namespace Tobtech.OmnikeyRco
         {
             lock (errorGate)
             {
-                return "BRICKLÄSAREN RECEPTION 3.6.5 – POWERSHELL\r\n" +
-                    "Läsarmotor: v3.6.5, standardformat med frivillig lokal IT-kalibrering.\r\n" +
+                return "BRICKLÄSAREN RECEPTION 3.6.6 – POWERSHELL\r\n" +
+                    "Läsarmotor: v3.6.6, standardformat med frivillig lokal IT-kalibrering.\r\n" +
                     "Rapport skapad: " + DateTime.Now.ToString("s") + "\r\n" +
-                    "Diagnostik: anslutning 1.\r\n" +
+                    "Diagnostik: anslutning 2.\r\n" + Updates.RecoverySummary(DataPath) + "\r\n" +
                     "Inga skannade nummer, råsvar, sökvägar eller undantagsmeddelanden ingår.\r\n\r\n" +
                     (errorSummaries.Count == 0 ? "Inga fel registrerade under denna programkörning." : String.Join("\r\n", errorSummaries.ToArray()));
             }
@@ -459,7 +467,7 @@ namespace Tobtech.OmnikeyRco
         {
             get
             {
-                return "BRICKLÄSAREN 3.6.5\r\n\r\n" +
+                return "BRICKLÄSAREN 3.6.6\r\n\r\n" +
                     "Starta med " + ReceptionFiles.LauncherName + ".\r\n" +
                     "Första gången väljer du vilket passersystem du ska läsa för.\r\n" +
                     "Valet sparas direkt och används automatiskt vid nästa start.\r\n" +

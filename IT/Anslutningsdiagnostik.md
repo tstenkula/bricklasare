@@ -20,3 +20,9 @@ Metodnamnen i rapporten kommer från programmets källkod. De innehåller inga a
 Att version 3.1 fungerade bekräftar inte att senare USB-förberedelse har lyckats. Radera inte original- eller återställningsfiler och återställ inte läsaren till fabriksinställningar som första felsökningssteg. Rapporten hjälper oss att skilja en läsarkompatibilitet från ett lokalt filproblem.
 
 Från 3.6.3 godkänner Windows både `00`/`FF` och heltalsrepresentationerna `0000`/`00FF` för USB-läget (av/på). Andra värden och fel datatyper stoppas fortfarande. En verklig läsare har rapporterat INTEGER med två byte; anslutningen med 3.6.3 har därefter bekräftats fungera på den läsaren. Själva brickläsningen och övriga hårdvaruprov behöver fortfarande bekräftas.
+
+### Ljudformat och uppdateringsspärr (3.6.6)
+
+Spara felrapport under Hjälp. Vid Gen1-formatfel anger `SOUND_GEN1_FORMAT` kontrollen `Length` eller `Flags`, tabellens byteantal och vid flaggfel en offentlig sekvens-/stegposition. Inga sekvensvärden delas.
+
+Rapporten räknar även sparade återställningsfiler för läsning respektive USB, utan namn, läsar-ID eller innehåll. En sådan fil kan tillhöra en tidigare körning eller annan läsare även om den anslutna läsaren är klar. Uppdateringsspärren behålls och förklaras uttryckligen; inga journaler raderas eller kringgås. Använd Återställ läsaren bara om den knappen är tillgänglig för den anslutna läsaren. Om den redan är klar och uppdateringen ändå spärras behöver IT granska den lokala återställningen. Manuell uppackning i en separat programmapp bevarar AppData, där återställningen ligger.

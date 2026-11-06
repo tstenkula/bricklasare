@@ -613,7 +613,12 @@
                 foreach (string file in ReceptionFiles.RequiredPackageFiles) Check(File.Exists(Path.Combine(released, file)), "Released archive contains " + file);
             }
             Check(!Updates.Pending(root), "No pending recovery");
+            Check(Updates.RecoverySummary(root) == "Sparad återställning: läsning 0; USB 0.", "Idle update diagnosis reports no persistent recovery");
             File.WriteAllText(Path.Combine(root,"aterstall-test.json"),"pending"); Check(Updates.Pending(root), "Pending recovery blocks installation");
+            File.WriteAllText(Path.Combine(root,"usb-pending-private-id.json"),"private content");
+            Check(Updates.RecoverySummary(root) == "Sparad återställning: läsning 1; USB 1.", "Recovery diagnosis counts old journals without paths, IDs or contents");
+            Check(Updates.RecoveryHelp.Contains("tidigare körning") && Updates.RecoveryHelp.Contains("annan läsare"), "Update guard explains persistent journals instead of claiming a live scan");
+            Check(File.ReadAllText(Path.Combine(root,"usb-pending-private-id.json")) == "private content", "Update diagnosis never removes recovery information");
             using (MemoryStream bytes = new MemoryStream()) {
                 using (var zip = new System.IO.Compression.ZipArchive(bytes, System.IO.Compression.ZipArchiveMode.Create, true)) { var entry = zip.CreateEntry("../escape"); using (var writer = new StreamWriter(entry.Open())) writer.Write("escape"); }
                 Reject(delegate { Updates.Extract(bytes.ToArray(),Path.Combine(root,"extract")); }, "Archive traversal rejected");
@@ -785,6 +790,7 @@
                 ReaderClient reader = new ReaderClient("192.168.63.99", path, new LocalLog()); reader.TestTransport = fake.Send; reader.TestLegacySoundTransport = fake.Read; reader.Connect();
                 // Only the fourth user-visible event is audible. It has sequence ID 10.
                 foreach (int seq in new[] { 0, 1, 2 }) fake.Core.SoundTable[seq * 13] &= 0xEF;
+                fake.Core.SoundTable[12] = 255; fake.Core.SoundTable[38] = 255;
                 byte[] original = (byte[])fake.Core.SoundTable.Clone();
                 Check(reader.ReadReaderSound() && reader.Compatibility.SoundMethod == ReaderSoundMethod.LegacyWebSequences, "Gen1 reads the web table and recognizes Keyboard Wedge sound");
                 Check(fake.ModernReads == 0 && fake.Writes.Count == 0, "Connection checks do not issue the unsupported APDU table query or reader writes");
@@ -812,6 +818,32 @@
                 fake.Core.SoundTable[130] |= 128;
                 Reject(delegate { reader.ReadReaderSound(); }, "Unknown flags in the fourth public record fail closed");
                 Check(fake.Writes.Count == writes, "Invalid legacy table does not mutate the reader");
+            }
+            {
+                string path = Path.Combine(directory, "repeat-byte"); Directory.CreateDirectory(path);
+                LegacySoundFake fake = new LegacySoundFake(11);
+                ReaderClient reader = new ReaderClient("192.168.63.99", path, new LocalLog()); reader.TestTransport = fake.Send; reader.TestLegacySoundTransport = fake.Read; reader.Connect();
+                for (int value = 0; value <= 255; value++)
+                {
+                    foreach (int seq in new[] { 0, 1, 2, 10 }) fake.Core.SoundTable[seq * 13 + 12] = (byte)value;
+                    Check(reader.ReadReaderSound(), "Every documented repeat byte is accepted: " + value);
+                }
+                Check(fake.Writes.Count == 0, "Reading repeat values never writes the reader");
+                fake.Core.SoundTable = new byte[130];
+                try { reader.ReadReaderSound(); throw new Exception("Expected invalid length"); }
+                catch (InvalidDataException error)
+                {
+                    string report = ReceptionFiles.SafeError(error);
+                    Check(report.Contains("SOUND_GEN1_FORMAT") && report.Contains("byte 130; kontroll Length"), "Rejected legacy length reports bounded table shape");
+                }
+                fake.Core.SoundTable = new byte[143]; fake.Core.SoundTable[130] = 128;
+                try { reader.ReadReaderSound(); throw new Exception("Expected invalid flags"); }
+                catch (InvalidDataException error)
+                {
+                    string report = ReceptionFiles.SafeError(error);
+                    Check(report.Contains("kontroll Flags; sekvens 10; steg 0") && !report.Contains("8000"), "Rejected public flag location is reported without raw sequence bytes");
+                }
+                Check(fake.Writes.Count == 0, "Malformed lengths and flags still cause no writes");
             }
             {
                 string path = Path.Combine(directory, "external-edit"); Directory.CreateDirectory(path);
