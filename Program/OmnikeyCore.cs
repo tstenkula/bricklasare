@@ -242,17 +242,19 @@ namespace Tobtech.OmnikeyRco
         }
     }
     public enum ReaderGeneration { Gen1, Gen2 }
-    public enum ReaderSoundMethod { ProbeRequired, SequenceTable130, LegacyNotImplemented, Unavailable }
+    public enum ReaderSoundMethod { ProbeRequired, SequenceTable130, LegacyWebProbe, LegacyWebSequences, Unavailable }
     public sealed class ReaderCompatibility
     {
         public ReaderGeneration Generation { get; private set; }
         public string FirmwareHex { get; private set; }
         public string FirmwareDisplay { get { return FirmwareHex.Substring(0, 2) + "." + FirmwareHex.Substring(2, 2) + "." + FirmwareHex.Substring(4); } }
         public ReaderSoundMethod SoundMethod { get; private set; }
-        public string SoundExplanation { get { return SoundMethod == ReaderSoundMethod.LegacyNotImplemented ?
-            "Läsarens pip: Gen1 med firmware " + FirmwareDisplay + " behöver en annan ljudmetod som ännu inte finns i appen." :
+        private string soundRestriction;
+        public string SoundExplanation { get { return soundRestriction ?? (UsesLegacySoundWeb && SoundMethod != ReaderSoundMethod.LegacyWebSequences ?
+            "Läsarens pip: Gen1 med firmware " + FirmwareDisplay + " behöver få sitt ljudläge verifierat via USB-webbgränssnittet." :
             SoundMethod == ReaderSoundMethod.Unavailable ? "Läsarens pip: ljudinställningen saknas i den anslutna läsarens gränssnitt." :
-            "Läsarens pip: ljudläget har inte kunnat verifieras. Försök ansluta igen."; } }
+            "Läsarens pip: ljudläget har inte kunnat verifieras. Försök ansluta igen."); } }
+        internal bool UsesLegacySoundWeb { get { return Generation == ReaderGeneration.Gen1 && FirmwareHex == "04020100"; } }
         internal ReaderCompatibility(byte board, byte[] firmware)
         {
             if ((board != 6 && board != 10) || firmware == null || firmware.Length != 4)
@@ -260,19 +262,24 @@ namespace Tobtech.OmnikeyRco
             Generation = board == 6 ? ReaderGeneration.Gen1 : ReaderGeneration.Gen2;
             FirmwareHex = Codec.ToHex(firmware);
             // Exact observed combination, not an inferred firmware-version range.
-            SoundMethod = board == 6 && FirmwareHex == "04020100" ? ReaderSoundMethod.LegacyNotImplemented : ReaderSoundMethod.ProbeRequired;
+            SoundMethod = UsesLegacySoundWeb ? ReaderSoundMethod.LegacyWebProbe : ReaderSoundMethod.ProbeRequired;
         }
         internal void BeginSoundProbe()
         {
-            if (SoundMethod == ReaderSoundMethod.LegacyNotImplemented || SoundMethod == ReaderSoundMethod.Unavailable)
+            if (SoundMethod == ReaderSoundMethod.Unavailable)
                 throw new NotSupportedException(SoundExplanation);
-            SoundMethod = ReaderSoundMethod.ProbeRequired;
+            SoundMethod = UsesLegacySoundWeb ? ReaderSoundMethod.LegacyWebProbe : ReaderSoundMethod.ProbeRequired;
         }
-        internal void ConfirmSoundTable() { SoundMethod = ReaderSoundMethod.SequenceTable130; }
+        internal void ConfirmSoundTable() { SoundMethod = UsesLegacySoundWeb ? ReaderSoundMethod.LegacyWebSequences : ReaderSoundMethod.SequenceTable130; }
         internal void MissingSoundTable() { SoundMethod = ReaderSoundMethod.Unavailable; }
+        internal void BlockLegacyOverride()
+        {
+            soundRestriction = "Läsarens äldre tangentbordsindikering är aktiv. Appen kan därför inte verifiera pipet säkert.";
+            SoundMethod = ReaderSoundMethod.Unavailable;
+        }
         internal void RequireSoundWrite()
         {
-            if (SoundMethod != ReaderSoundMethod.SequenceTable130) throw new NotSupportedException(SoundExplanation);
+            if (SoundMethod != ReaderSoundMethod.SequenceTable130 && SoundMethod != ReaderSoundMethod.LegacyWebSequences) throw new NotSupportedException(SoundExplanation);
         }
     }
     public sealed partial class ReaderClient
@@ -404,9 +411,15 @@ namespace Tobtech.OmnikeyRco
         }
         private void AtomicWrite(string path, string data)
         {
-            string temp = path + ".tmp";
-            File.WriteAllText(temp, data, new UTF8Encoding(true));
-            if (File.Exists(path)) File.Replace(temp, path, null); else File.Move(temp, path);
+            string temp = path + "." + Guid.NewGuid().ToString("N") + ".tmp";
+            try
+            {
+                byte[] bytes = new UTF8Encoding(true).GetBytes(data);
+                using (FileStream output = new FileStream(temp, FileMode.CreateNew, FileAccess.Write, FileShare.None))
+                { output.Write(bytes, 0, bytes.Length); output.Flush(true); }
+                if (File.Exists(path)) File.Replace(temp, path, null); else File.Move(temp, path);
+            }
+            finally { if (File.Exists(temp)) File.Delete(temp); }
         }
         private Journal TakeBackup()
         {

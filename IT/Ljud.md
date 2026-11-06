@@ -67,3 +67,19 @@ Den fristående verktygsgränsen blir 2 MiB per fil i både överförd och uppac
 Större eller komprimerat skript är möjliga orsaker till det fysiska stoppet, ännu inte bekräftade sådana. Den nya versionen och de säkra felkoderna ska hantera dessa fall och göra ett kvarvarande fel tydligt utan fler gissningar. Fysisk verifiering av version 4 återstår när läsaren åter finns tillgänglig.
 
 Formatunderlag: RFC1950 (https://www.rfc-editor.org/rfc/rfc1950) och RFC1952 (https://www.rfc-editor.org/rfc/rfc1952). Framework DeflateStream använder rå RFC1951, varför zlib-ram och Adler32 hanteras separat i verktyget (Microsofts referenskod: https://github.com/microsoft/referencesource/blob/main/System/InternalApis/NDP_FX/inc/ZLibNative.cs). Tester använder oberoende Python-genererade vektorer, en expanderande testfil och korrupta/avklippta kontroller. Ingen kod från läsaren körs.
+
+## Windows 3.6.5: Gen1-ljud via webbgränssnittet
+
+Det insamlade skriptet analyserades som text utan att köras. Båda uppladdade kopiorna var identiska och behålls utanför repot. Råskriptet och lokala uppgifter distribueras inte med appen.
+
+Funktionen Wc läser en rå MIB-PDU via POST `/ajax`; den använder inte APDU-omslaget på `/cjax`. LED-vyn begär tabellen `02020104010100` samt booleska `04010900`. Tabellposterna är 13 byte. De användarvalbara sekvens-ID:na är 0 (USB Ready), 1 (Card Access), 2 (No USB) och 10 (Keyboard Wedge). Den fjärde händelsen har alltså ID 10, inte ID 3.
+
+Windows väljer denna backend endast för identifierad Gen1 med exakt firmware 04020100. Webbfrågan tillåter bara dessa två MIB:ar och bygger alltid en ren läs-PDU. Samma verifierade USB-adapter och IP-bindning som ordinarie trafik används, med samma 16 KiB-svarsgräns. Identitet och firmware kontrolleras före och efter läsning. Andra kombinationer behåller APDU-metoden.
+
+En Gen1-tabell måste ha kompletta 13-byteposter och rymma ID 10 inom GUI:ts entydigt avkodningsbara BER-längd: 11–19 poster. Bara de fyra offentliga posternas flaggor och repetitionsfält valideras och redigeras. Övriga bytes bevaras. Flaggan för äldre tangentbordsindikering måste vara läsbar och av. Aktiv eller okänd flagga ger ingen ljudändring; appen ändrar aldrig själva flaggan.
+
+Schema 2 för lokala Gen1-ljudkopior binder de fyra packade posterna till läsar-ID, firmware, protokoll och tabellängd. Äldre schema 1 med tre poster återtolkas inte till Gen1. Journalen flushas före första skrivningen. Varje skrivsteg kontrollerar aktuell identitet och oförändrade ljus-/tidsfält, lagrar enbart ID 0/1/2/10 och återställer automatisk indikering utan provpip eller rensning. Gen1 använder GUI:ts direkta lagringskommando och skickar ingen separat Apply som kan verkställa andra väntande MIB-ändringar. Hela tabellen läses tillbaka och jämförs.
+
+Även omedelbar rollback kontrollerar att ljus, tider och repetitionsantal inte ändrats externt. Annars behålls journalen och de aktuella inställningarna. Återställning bevarar aktuell intern tabelldata. Moderna schema 1-kopior fortsätter fungera. Undvik samtidig redigering i webbgränssnittet när appen ändrar ljudet; läsaren erbjuder ingen atomisk jämför-och-skriv-operation.
+
+Protokollvägen och indexen är belagda i den insamlade koden. Den verkliga tabellens format och av/på-resultat måste fortfarande provas med fysisk läsare. Denna version förbereds därför som förhandsversion. Mac har ännu ingen verifierad läsväg för denna Gen1-tabell via CCID, så stödet aktiveras inte där.

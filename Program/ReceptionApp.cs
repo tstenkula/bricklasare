@@ -243,7 +243,7 @@ namespace Tobtech.OmnikeyRco
 
             string iconPath = Path.Combine(ReceptionFiles.PackagePath, "Program", "Bricklasaren.ico");
             if (File.Exists(iconPath)) { try { using (Icon source = new Icon(iconPath)) appIcon = (Icon)source.Clone(); Icon = appIcon; } catch (ArgumentException) { } catch (IOException) { } catch (UnauthorizedAccessException) { } }
-            Text = "Brickläsaren · 3.6.4";
+            Text = "Brickläsaren · 3.6.5";
             Font = Ui.GetFont(10F); ForeColor = Ui.Ink; BackColor = Ui.Paper;
             AutoScaleMode = AutoScaleMode.Dpi; AutoScaleDimensions = new SizeF(96F, 96F);
             StartPosition = FormStartPosition.CenterScreen;
@@ -343,7 +343,7 @@ namespace Tobtech.OmnikeyRco
                 e.Cancel = true; RequestCancel();
                 notice.Text = "Låt programmet arbeta klart. Stäng sedan fönstret igen.";
             };
-            log.Add("Receptionsgränssnitt 3.6.4 (PowerShell). Lokal diagnostik utan råa kortdata.");
+            log.Add("Receptionsgränssnitt 3.6.5 (PowerShell). Lokal diagnostik utan råa kortdata.");
             ApplyAppearance(); ApplyModeUi(); UpdateButtons(); ResumeLayout(true);
             if (previewOnly) connection.Text = "Förhandsvisning · ingen läsarkontakt";
         }
@@ -1049,7 +1049,7 @@ namespace Tobtech.OmnikeyRco
             Button test = ActionButton("Kontrollera referensbricka", "Reference"); test.Enabled = protectedOutput && connected && !pending;
             Button restore = ActionButton("Återställ läsaren", "Recover"); restore.Enabled = pending;
             service.Controls.Add(test); service.Controls.Add(restore); Ui.Add(advanced, service);
-            Ui.Add(advanced, Ui.Label("Version 3.6.4 · PowerShell · Programmet läser bricknummer.\r\nTobtech", 9F, false));
+            Ui.Add(advanced, Ui.Label("Version 3.6.5 · PowerShell · Programmet läser bricknummer.\r\nTobtech", 9F, false));
             Shown += delegate { Ui.FitToScreen(this); };
             more.Click += delegate
             {

@@ -623,6 +623,7 @@
         private static void ExerciseReaderSound(string directory)
         {
             Directory.CreateDirectory(directory);
+            ExerciseLegacyReaderSound(Path.Combine(directory, "legacy"));
             foreach (byte model in new byte[] { 6, 10 })
             {
                 string path = Path.Combine(directory, "compat-" + model); Directory.CreateDirectory(path);
@@ -770,6 +771,105 @@
             Check(report.Contains("ReaderSafety.DecodeMode"), "Invalid mode retains the safe validation boundary: " + report);
             Check(report.Contains("UsbOriginal:"), "Invalid mode does not stop independent local-state checks: " + report);
             Check(fake.Writes == 0 && Directory.GetFiles(directory).Length == 0, "All diagnostic error paths remain read only");
+        }
+        private static void ExerciseLegacyReaderSound(string directory)
+        {
+            Check(ReaderNetwork.LegacySoundQuery(ReaderClient.SoundOid) == "0000000D07020201040101000500", "Gen1 table request matches the uploaded GUI's raw read PDU");
+            Check(ReaderNetwork.LegacySoundQuery(ReaderClient.LegacyFlagOid) == "0000000D04040109000500", "Legacy switch request is read-only and allow-listed");
+            foreach (string oid in new[] { "010A00", "04010900020000", "", null })
+                Reject(delegate { ReaderNetwork.LegacySoundQuery(oid); }, "Web backend cannot query arbitrary MIBs or inject a SET");
+            foreach (int records in new[] { 11, 12 })
+            {
+                string path = Path.Combine(directory, records.ToString()); Directory.CreateDirectory(path);
+                LegacySoundFake fake = new LegacySoundFake(records);
+                ReaderClient reader = new ReaderClient("192.168.63.99", path, new LocalLog()); reader.TestTransport = fake.Send; reader.TestLegacySoundTransport = fake.Read; reader.Connect();
+                // Only the fourth user-visible event is audible. It has sequence ID 10.
+                foreach (int seq in new[] { 0, 1, 2 }) fake.Core.SoundTable[seq * 13] &= 0xEF;
+                byte[] original = (byte[])fake.Core.SoundTable.Clone();
+                Check(reader.ReadReaderSound() && reader.Compatibility.SoundMethod == ReaderSoundMethod.LegacyWebSequences, "Gen1 reads the web table and recognizes Keyboard Wedge sound");
+                Check(fake.ModernReads == 0 && fake.Writes.Count == 0, "Connection checks do not issue the unsupported APDU table query or reader writes");
+                Check(!reader.SetReaderSound(false), "Gen1 mute is confirmed by the web readback");
+                Check(fake.Writes.SequenceEqual(new[] { 0, 1, 2, 10 }) && fake.ApplyCount == 0 && fake.AutoCount == 1, "Only GUI public IDs are stored; no run/clear or unrelated Apply command");
+                byte[] quiet = (byte[])original.Clone();
+                foreach (int seq in new[] { 0, 1, 2, 10 }) for (int step = 0; step < 6; step++) quiet[seq * 13 + step * 2] &= 0xEF;
+                Check(quiet.SequenceEqual(fake.Core.SoundTable), "All legacy LEDs, durations, repeats and internal records are preserved");
+                int writes = fake.Writes.Count; Check(!reader.SetReaderSound(false) && fake.Writes.Count == writes, "Repeated legacy mute never writes flash");
+                string backupPath = Path.Combine(path, "lasarljud-" + reader.ReaderId + ".json");
+                var serializer = new System.Web.Script.Serialization.JavaScriptSerializer();
+                ReaderSoundBackup saved = serializer.Deserialize<ReaderSoundBackup>(File.ReadAllText(backupPath));
+                Check(saved.Schema == 2 && saved.Protocol == "Gen1WebSequences-v1" && saved.TableLength == original.Length && Codec.Hex(saved.Original).Length == 52 && String.IsNullOrEmpty(saved.Pending), "Legacy backup binds four packed records to protocol, identity, firmware and table shape");
+                Check(reader.SetReaderSound(true) && fake.Core.SoundTable.SequenceEqual(original), "Gen1 unmute restores the exact original public sequences");
+                fake.FailSequence = 10;
+                bool failed = false; try { reader.SetReaderSound(false); } catch (IOException) { failed = true; }
+                Check(failed && fake.Core.SoundTable.SequenceEqual(original) && reader.ReadReaderSound(), "Lost legacy response rolls back before reporting success");
+                fake.LegacyFlag = 255; writes = fake.Writes.Count;
+                bool blocked = false; try { reader.SetReaderSound(false); } catch (NotSupportedException) { blocked = true; }
+                Check(blocked && fake.Writes.Count == writes, "Active legacy wedge override blocks sound changes without altering its setting"); fake.LegacyFlag = 0; reader.Connect();
+                saved.Schema = 1; saved.Protocol = null; saved.TableLength = 0; saved.Original = Codec.ToHex(original.Take(39).ToArray());
+                File.WriteAllText(backupPath, serializer.Serialize(saved));
+                Reject(delegate { reader.SetReaderSound(false); }, "A modern three-record backup is never reinterpreted as a legacy four-record backup");
+                Check(fake.Writes.Count == writes, "Wrong backup schema cannot enter a reader write"); File.Delete(backupPath);
+                fake.Core.SoundTable[130] |= 128;
+                Reject(delegate { reader.ReadReaderSound(); }, "Unknown flags in the fourth public record fail closed");
+                Check(fake.Writes.Count == writes, "Invalid legacy table does not mutate the reader");
+            }
+            {
+                string path = Path.Combine(directory, "external-edit"); Directory.CreateDirectory(path);
+                LegacySoundFake fake = new LegacySoundFake(11);
+                ReaderClient reader = new ReaderClient("192.168.63.99", path, new LocalLog()); reader.TestTransport = fake.Send; reader.TestLegacySoundTransport = fake.Read; reader.Connect();
+                fake.FailSequence = 0; fake.EditDuringFailure = true;
+                bool failed = false; try { reader.SetReaderSound(false); } catch (IOException) { failed = true; }
+                Check(failed && fake.Writes.Count == 1 && fake.Core.SoundTable[131] == 3, "Immediate rollback never overwrites a concurrent legacy timing change");
+                string backup = Path.Combine(path, "lasarljud-" + reader.ReaderId + ".json"), before = File.ReadAllText(backup);
+                bool blocked = false; try { reader.ReadReaderSound(); } catch (InvalidOperationException) { blocked = true; }
+                Check(blocked && fake.Writes.Count == 1 && File.ReadAllText(backup) == before, "Conflicting legacy recovery preserves the pending journal and live fields");
+            }
+        }
+        private sealed class LegacySoundFake
+        {
+            internal readonly FakeReader Core = new FakeReader { Firmware = "04020100", Board = 6 };
+            internal readonly System.Collections.Generic.List<int> Writes = new System.Collections.Generic.List<int>();
+            internal int ModernReads, AutoCount, ApplyCount, FailSequence = -1;
+            internal byte LegacyFlag;
+            internal bool EditDuringFailure;
+            internal LegacySoundFake(int records)
+            {
+                Core.SoundTable = Enumerable.Repeat((byte)165, records * 13).ToArray();
+                foreach (int seq in new[] { 0, 1, 2, 10 })
+                {
+                    Array.Clear(Core.SoundTable, seq * 13, 13);
+                    Core.SoundTable[seq * 13] = 17; Core.SoundTable[seq * 13 + 1] = 2;
+                    Core.SoundTable[seq * 13 + 2] = 1; Core.SoundTable[seq * 13 + 3] = 1;
+                }
+            }
+            internal byte[] Send(string command)
+            {
+                if (command == Codec.GetMibCommand(ReaderClient.SoundOid)) { ModernReads++; return Codec.Hex("0302009000"); }
+                if (command == "FF6800010101") { ApplyCount++; return Codec.Hex("9000"); }
+                if (command == "FF680380") { AutoCount++; return Codec.Hex("9000"); }
+                byte[] bytes = Codec.Hex(command);
+                if (bytes.Length >= 4 && bytes[2] == 3)
+                {
+                    int seq = bytes[3] & 63;
+                    if (bytes.Length != 18 || bytes[3] != (64 | seq) || bytes[4] != 13 || !new[] { 0, 1, 2, 10 }.Contains(seq)) throw new InvalidOperationException("Unexpected legacy command");
+                    Writes.Add(seq); Array.Copy(bytes, 5, Core.SoundTable, seq * 13, 13);
+                    if (FailSequence == seq)
+                    {
+                        FailSequence = -1; if (EditDuringFailure) Core.SoundTable[131]++;
+                        throw new IOException("Simulated lost legacy response");
+                    }
+                    return Codec.Hex("9000");
+                }
+                return Core.Send(command);
+            }
+            internal string Read(string query)
+            {
+                string oid; byte tag; byte[] data;
+                if (query == ReaderNetwork.LegacySoundQuery(ReaderClient.SoundOid)) { oid = ReaderClient.SoundOid; tag = 4; data = Core.SoundTable; }
+                else if (query == ReaderNetwork.LegacySoundQuery(ReaderClient.LegacyFlagOid)) { oid = ReaderClient.LegacyFlagOid; tag = 1; data = new[] { LegacyFlag }; }
+                else throw new InvalidOperationException("Unexpected legacy query");
+                return "0300000D" + (oid.Length / 2).ToString("X2") + oid + tag.ToString("X2") + (data.Length >= 128 ? "81" : "") + data.Length.ToString("X2") + Codec.ToHex(data);
+            }
         }
         private sealed class FakeReader
         {
