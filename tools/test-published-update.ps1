@@ -352,6 +352,13 @@ namespace Tobtech.Acceptance {
         $job.Dispose(); $job = $null
         if (-not $helperOut.Wait(10000) -or -not $helperErr.Wait(10000)) { throw 'Installer child output did not close after terminating the owned job.' }
         [IO.File]::WriteAllText((Join-Path $OutputDirectory 'full-installer.log'), $helperOut.Result + $helperErr.Result, $utf8)
+        # Retain validation evidence before asserting exit status, including failures.
+        foreach ($logName in @('validation-output.txt','validation-error.txt')) {
+            $logPath = Join-Path $stage $logName
+            if (Test-Path -LiteralPath $logPath -PathType Leaf) { Copy-Item -LiteralPath $logPath -Destination (Join-Path $OutputDirectory $logName) }
+        }
+        $statusPath = Join-Path $data 'uppdatering-status.txt'
+        if (Test-Path -LiteralPath $statusPath -PathType Leaf) { Copy-Item -LiteralPath $statusPath -Destination (Join-Path $OutputDirectory 'installer-status.txt') }
         if ($UseCurrentRecoveryHelper) {
             Confirm ($exit -eq 0) 'Current helper completes real installation with saved scan, USB and sound recovery'
             $preserved = Join-Path $stage 'preserved-settings'

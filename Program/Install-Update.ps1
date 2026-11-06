@@ -11,6 +11,7 @@ $dataRoot = $null
 $candidate = $null
 $zip = $null
 $memory = $null
+$phase = 'VERIFY'
 
 function Read-UpdateFile([string]$Path, [long]$Maximum) {
     if (((Get-Item -LiteralPath $Path -Force).Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) { throw 'Linked update file' }
@@ -139,6 +140,7 @@ try {
     if (-not $locked) { throw 'Another application is running' }
     # The app has exited and its exclusive mutex is held. Preserve all settings,
     # including journals for this or other readers, before running the new self-test.
+    $phase = 'PRESERVE_SETTINGS'
     $preservedSettings = Save-UpdateSettingsSnapshot $dataRoot $jobRoot
     # Extract into a fresh sibling on the target volume. Prepared loose files are never trusted.
     $candidate = $target + '.new-' + [Guid]::NewGuid().ToString('N')
@@ -176,9 +178,29 @@ try {
     $entrySource = [IO.File]::ReadAllText((Join-Path $candidate 'Program\Entry.cs'))
     if (-not $entrySource.Contains('AssemblyVersion("' + $asset.Version + '.0")')) { throw 'Unexpected package version' }
     $shell = Join-Path $PSHOME 'powershell.exe'
-    $test = Start-Process -FilePath $shell -ArgumentList @('-NoProfile','-STA','-File',('"' + (Join-Path $candidate 'Program\Starta-Bricklasaren.ps1') + '"'),'-SelfTestOnly') -WindowStyle Hidden -RedirectStandardOutput (Join-Path $jobRoot 'validation-output.txt') -RedirectStandardError (Join-Path $jobRoot 'validation-error.txt') -PassThru
-    if (-not $test.WaitForExit(120000)) { $test.Kill(); throw 'New version self-test timed out' }
-    if ($test.ExitCode -ne 0) { throw 'New version self-test failed' }
+    $phase = 'VALIDATE_PACKAGE'
+    # Keep an owned Process/handle throughout validation. Start-Process -PassThru
+    # can lose its exit-code handle after redirected children have exited.
+    $test = New-Object Diagnostics.Process
+    $test.StartInfo = New-Object Diagnostics.ProcessStartInfo
+    $test.StartInfo.FileName = $shell
+    $test.StartInfo.Arguments = '-NoProfile -STA -File "' + (Join-Path $candidate 'Program\Starta-Bricklasaren.ps1') + '" -SelfTestOnly'
+    $test.StartInfo.UseShellExecute = $false; $test.StartInfo.CreateNoWindow = $true
+    $test.StartInfo.RedirectStandardOutput = $true; $test.StartInfo.RedirectStandardError = $true
+    $validationOut = $null; $validationErr = $null
+    try {
+        if (-not $test.Start()) { throw 'New version validation could not start' }
+        $validationOut = $test.StandardOutput.ReadToEndAsync(); $validationErr = $test.StandardError.ReadToEndAsync()
+        if (-not $test.WaitForExit(120000)) { $test.Kill(); throw 'New version validation timed out' }
+        $validationExit = $test.ExitCode
+        if (-not $validationOut.Wait(5000) -or -not $validationErr.Wait(5000)) { throw 'New version validation output did not close' }
+        if ($validationExit -ne 0) { throw 'New version validation failed' }
+    } finally {
+        if ($null -ne $validationOut -and $validationOut.IsCompleted -and -not $validationOut.IsFaulted) { [IO.File]::WriteAllText((Join-Path $jobRoot 'validation-output.txt'), $validationOut.Result) }
+        if ($null -ne $validationErr -and $validationErr.IsCompleted -and -not $validationErr.IsFaulted) { [IO.File]::WriteAllText((Join-Path $jobRoot 'validation-error.txt'), $validationErr.Result) }
+        $test.Dispose()
+    }
+    $phase = 'REPLACE_PROGRAM'
     Assert-PlainPath $target
     Assert-PlainPath $candidate
     Assert-UpdateSettingsSnapshot $dataRoot $preservedSettings
@@ -187,6 +209,7 @@ try {
     try { [IO.Directory]::Move($candidate, $target); $candidate = $null }
     catch { [IO.Directory]::Move($backup, $target); $backup = $null; throw }
     Assert-UpdateSettingsSnapshot $dataRoot $preservedSettings
+    $phase = 'RESTART'
     $mutex.ReleaseMutex(); $locked = $false
     $mutex.Dispose(); $mutex = $null
     Start-Process -FilePath $shell -ArgumentList @('-NoProfile','-STA','-File',('"' + (Join-Path $target 'Program\Starta-Bricklasaren.ps1') + '"')) -WorkingDirectory $target -WindowStyle Hidden
@@ -198,6 +221,7 @@ try {
     if ($null -ne $dataRoot) {
         [IO.File]::WriteAllText((Join-Path $dataRoot 'uppdatering-status.txt'), 'Uppdateringen misslyckades. Starta Bricklasaren igen. Tidigare version finns kvar som .previous-kopia om mappbytet hann slutföras.')
     }
+    Write-Host ('Uppdateringskontroll: {0}; {1}; HRESULT 0x{2:X8}' -f $phase, $_.Exception.GetType().FullName, $_.Exception.HResult)
     Write-Host 'Uppdateringen kunde inte slutföras. Starta Brickläsaren igen. Tidigare version finns kvar.'
     exit 1
 } finally {
