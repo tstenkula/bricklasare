@@ -56,7 +56,8 @@ try {
             if (Test-Path -LiteralPath $control) { Get-Content -LiteralPath $control -Encoding UTF8 | Select-Object -Last 8 | ForEach-Object { Write-Host $_ } }
             Add-Type -AssemblyName System.IO.Compression.FileSystem
             $zip = $directory + '.zip'
-            if (-not (Test-Path -LiteralPath $zip)) { [IO.Compression.ZipFile]::CreateFromDirectory($directory, $zip) }
+            if (Test-Path -LiteralPath $zip) { [IO.File]::Delete($zip) }
+            [IO.Compression.ZipFile]::CreateFromDirectory($directory, $zip)
             Write-Host ('Underlag: ' + $zip)
         } catch { Write-Host 'ZIP eller kontrollrapport kunde inte skrivas. Kontrollera skrivbehörighet och ledigt utrymme.' }
         Write-Host ('Rapportmapp: ' + $directory)
