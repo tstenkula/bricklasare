@@ -3,7 +3,7 @@
 param(
     [switch]$InstallOnDisposableRunner,
     [string]$OutputDirectory,
-    [ValidateSet('historical', 'stable-3.6.1', 'stable-3.6.2', 'stable-3.6.4', 'preview-3.6.4', 'stable-3.6.5', 'preview-3.6.5')][string]$Case = 'historical'
+    [ValidateSet('historical', 'stable-3.6.1', 'stable-3.6.2', 'stable-3.6.4', 'preview-3.6.4', 'stable-3.6.5', 'preview-3.6.5', 'stable-3.6.6', 'preview-3.6.6')][string]$Case = 'historical'
 )
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
@@ -70,6 +70,20 @@ if ($Case -ceq 'stable-3.6.5' -or $Case -ceq 'preview-3.6.5') {
     $oldSize = 242157; $newSize = $null
     $oldHash = 'a95dbd8356d02e70ac70a55775d75e3e7ca22967a407192d067ff3991be16765'
     $helperHash = '3baac07899163c1da406f579b4e8fa766cdfb510918e2fc3cf2863da1f9d451e'
+    $newHash = $null; $feedHash = $null
+    $fixture = Join-Path $PSScriptRoot ('fixtures\published-' + $Case + '.feed')
+    if (-not (Test-Path -LiteralPath $fixture -PathType Leaf)) { throw 'The reviewed signed fixture is required.' }
+    $fixtureFile = Get-Item -LiteralPath $fixture -Force
+    if ($fixtureFile.Length -lt 1 -or $fixtureFile.Length -gt 65536 -or ($fixtureFile.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) { throw 'Invalid signed fixture file.' }
+}
+if ($Case -ceq 'stable-3.6.6' -or $Case -ceq 'preview-3.6.6') {
+    $sourceVersion = '3.6.5'; $targetVersion = '3.6.6'
+    $channel = if ($Case -ceq 'preview-3.6.6') { 'preview' } else { 'stable' }
+    $sourceTag = 'v3.6.5'
+    $targetTag = if ($channel -ceq 'preview') { 'v3.6.6-preview.1' } else { 'v3.6.6' }
+    $oldSize = 251579; $newSize = $null
+    $oldHash = 'babe696636afbfc91d8a05011cf1bb78e5aafd5c0d81a8ca83aa3e199e15722c'
+    $helperHash = '14a34552a71b38ad3bd427e164f50cf1a5dea904685a36aeda542f76a758a09e'
     $newHash = $null; $feedHash = $null
     $fixture = Join-Path $PSScriptRoot ('fixtures\published-' + $Case + '.feed')
     if (-not (Test-Path -LiteralPath $fixture -PathType Leaf)) { throw 'The reviewed signed fixture is required.' }
@@ -236,13 +250,13 @@ try {
             'lasarljud-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA.json' = '{"Schema":1,"ReaderId":"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA","Firmware":"00000000","Original":"000000000000000000000000000000000000000000000000000000000000000000000000000000"}'
             'acceptance-sentinel.txt' = 'Synthetic acceptance settings; no reader or card data.'
         }
-        if ($targetVersion -ceq '3.6.5') {
+        if ($targetVersion -ceq '3.6.5' -or $targetVersion -ceq '3.6.6') {
             $sentinels['lasarljud-BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB.json'] = ('{"Schema":2,"ReaderId":"BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB","Firmware":"04020100","Protocol":"Gen1WebSequences-v1","TableLength":143,"Original":"' + ('00' * 52) + '"}')
         }
         foreach ($name in $sentinels.Keys) { [IO.File]::WriteAllText((Join-Path $data $name), $sentinels[$name], $utf8) }
         $settingsBefore = File-Manifest $data
         [IO.File]::WriteAllText((Join-Path $target 'old-install-sentinel.txt'), 'Retain the complete old installation.', $utf8)
-        if ($targetVersion -ceq '3.6.4' -or $targetVersion -ceq '3.6.5') {
+        if ($targetVersion -ceq '3.6.4' -or $targetVersion -ceq '3.6.5' -or $targetVersion -ceq '3.6.6') {
             $oldLauncher = Join-Path $target 'Starta-Bricklasaren.cmd'
             Set-Content -LiteralPath $oldLauncher -Stream Zone.Identifier -Value @('[ZoneTransfer]', 'ZoneId=3') -Encoding ASCII
             Confirm ((Get-Content -LiteralPath $oldLauncher -Stream Zone.Identifier) -contains 'ZoneId=3') 'Old launcher has a synthetic browser download marker'
@@ -307,7 +321,7 @@ namespace Tobtech.Acceptance {
         Confirm (Same-Manifest $newFiles (File-Manifest $target)) ('Installed files exactly match the published ' + $targetVersion + ' ZIP')
         $backups = @(Get-ChildItem -LiteralPath $work -Directory | Where-Object { $_.Name -like 'installed app.previous-*' })
         Confirm ($backups.Count -eq 1 -and (Same-Manifest $oldFiles (File-Manifest $backups[0].FullName))) 'Previous installation is preserved byte for byte as a backup'
-        if ($targetVersion -ceq '3.6.4' -or $targetVersion -ceq '3.6.5') {
+        if ($targetVersion -ceq '3.6.4' -or $targetVersion -ceq '3.6.5' -or $targetVersion -ceq '3.6.6') {
             $newLauncher = Join-Path $target 'Starta-Bricklasaren.cmd'
             Confirm (@(Get-Item -LiteralPath $newLauncher -Stream Zone.Identifier -ErrorAction SilentlyContinue).Count -eq 0) 'Verified replacement creates a fresh launcher without inheriting the old download marker'
             $previousLauncher = Join-Path $backups[0].FullName 'Starta-Bricklasaren.cmd'
