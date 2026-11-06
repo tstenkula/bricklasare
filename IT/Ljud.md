@@ -49,3 +49,9 @@ Verktyget skriver `kontroll.txt` före nätverksläsning och sparar arbetssteg, 
 Tillåtna statiska HTTP-omdirigeringar följs högst tre gånger per resurs, till samma IP, port och verifierade USB-adapter. Inga externa mål, parametrar, autentiseringsuppgifter eller kommandosökvägar tillåts. Relativa skriptlänkar beräknas från den slutliga filsökvägen. Den totala gränsen 32 HTTP-förfrågningar omfattar även omdirigeringar; tids- och storleksgränser kvarstår. Appens striktare HTTP-parser och nätverksbeteende ändras inte. Verktyget återanvänder appens sparade adress i `reception.json` om den finns, utan att ändra filen.
 
 En fungerande APDU-anslutning i appen bevisar inte att webbgränssnittets GET-resurser kan hämtas. Ett misslyckande visas därför som insamlingsfel, utan att påstå att USB-drivrutinen saknas. Den tidigare felrapporten med enbart InvalidDataException fastställer inte grundorsaken; fysisk verifiering av verktyg 2 återstår.
+
+### Insamlingsverktyg 3: Gen1:s skriptlänk
+
+Kontroll 2 från fysisk läsare visar fungerande USB-anslutning och HTTP 200 med 433 byte från startsidan. Den manuellt tillhandahållna HTML-strukturen innehåller `webserver.js` följt av frågetecken och en 32 tecken lång hexmarkör. Det generella förbudet mot parametrar gjorde att skriptet hoppades över och gav NO_SCRIPTS.
+
+Referensupplösningen tar nu bort just denna form av cachemarkör för .js-filer innan den ordinarie kontrollen av värd, port och statisk sökväg. Varken markören eller andra parametrar skickas till läsaren. Frågeparametrar med nyckel/värde, andra filtyper, otillåtna mål och felaktiga markörer avvisas fortfarande. En reproduktion av sidans struktur med syntetisk markör verifierar att den centrala skriptfilen nu efterfrågas. Den faktiska markören och övriga lokala uppgifter har inte lagts i källkoden. Fysisk hämtning av skriptet återstår att prova.

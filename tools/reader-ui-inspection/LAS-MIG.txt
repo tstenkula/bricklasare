@@ -1,4 +1,4 @@
-BRICKLÄSAREN – UNDERLAG FÖR GEN1-LJUD, VERSION 2
+BRICKLÄSAREN – UNDERLAG FÖR GEN1-LJUD, VERSION 3
 
 Detta separata verktyg samlar kod från OMNIKEY 5427 CK:s inbyggda
 webbgränssnitt för att kunna undersöka hur Gen1 läser ljudinställningar.
@@ -19,7 +19,9 @@ Trafiken binds till den verifierade OMNIKEY USB-nätverksanslutningen.
 Wi-Fi, LAN och VPN används inte som reservväg. Inga APDU-kommandon,
 formulär, spara-, provpip-, omstarts- eller återställningskommandon skickas.
 Statiska omdirigeringar följs bara inom samma läsare, högst tre gånger.
-Externa länkar, kommandosökvägar och länkar med parametrar följs inte.
+Externa länkar och kommandosökvägar följs inte. En cachemarkör med exakt
+32 hextecken efter en .js-fil tas bort före hämtning. Övriga parametrar
+avvisas; inga parametrar skickas till läsaren.
 Kod från webbgränssnittet körs aldrig. HTML-sidor bearbetas i minnet;
 endast skript och rapport sparas. Tydliga HTML-felsidor som returneras
 i stället för skript hoppas över. Skripten kan ändå innehålla lokala uppgifter.

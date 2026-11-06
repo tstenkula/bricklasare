@@ -34,6 +34,21 @@ namespace Tobtech.OmnikeyRco
         public static int Run()
         {
             count = 0;
+            {
+                string cache = new string('A', 32);
+                Check(ReaderSoundInspection.ReferencePath(Address, "/", "webserver.js?" + cache) == "/webserver.js", "Observed Gen1 cache suffix is discarded before GET");
+                Check(ReaderSoundInspection.ReferencePath(Address, "/ui/index.htm", "webserver.js?" + cache.ToLowerInvariant()) == "/ui/webserver.js", "Cache suffix preserves relative resource directory");
+                foreach (string bad in new[] { "webserver.js?" + new string('A', 31), "webserver.js?" + new string('A', 33), "webserver.js?" + new string('g', 32),
+                    "webserver.js?cmd=" + cache, "webserver.js?" + cache + "&cmd=1", "webserver.js?" + cache + "#x", "index.htm?" + cache,
+                    "http://other.invalid/webserver.js?" + cache, "http://192.168.63.99:81/webserver.js?" + cache, "../webserver.js?" + cache })
+                    Check(ReaderSoundInspection.ReferencePath(Address, "/", bad) == null, "Only exact static-script cache marker may be removed; other URL safeguards remain");
+                Reject(delegate { ReaderNetwork.PublicFileRequest(Address, "/webserver.js?" + cache); }, "Network request builder still rejects every query, including cache markers");
+                List<string> fetched = new List<string>(); Dictionary<string, byte[]> saved = new Dictionary<string, byte[]>();
+                string html = "<!DOCTYPE html><html><head><title>OMNIKEY</title><meta charset='UTF-8'></head><body><div id='center'></div><script src=\"webserver.js?" + cache + "\"></script></body></html>";
+                Capture(new Dictionary<string, string> { { "/", html }, { "/webserver.js", "var gui = true;" } }, fetched, saved);
+                Check(fetched.SequenceEqual(new[] { "/", "/webserver.js" }) && saved.Count == 2, "Gen1 page shape now collects its central script without sending the cache query");
+                Check(saved.Values.Any(delegate(byte[] b) { return Encoding.ASCII.GetString(b) == "var gui = true;"; }), "Central script preserved as inert source text");
+            }
             Check(ReaderSoundInspection.FailureCode(new InvalidDataException("synthetic-private-message")) == "UNCLASSIFIED", "Arbitrary exception text is never converted into report output");
             Check(ReaderSoundInspection.FailureCode(new InvalidDataException("Oväntad HTTP-kodning från läsaren.")) == "HTTP_ENCODING", "Known HTTP failure classified without raw data");
             {
