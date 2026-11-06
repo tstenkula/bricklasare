@@ -30,6 +30,7 @@ REPO = 'tstenkula/bricklasare'
 FEED_COMMIT = '136898a6df968a3e0a99b6333dbe8983e4d464c3'
 FEED_SHA256 = 'cc104420dc4e9ffdbd2ca2a7d9f5563beb4efda4616c9c2fab899e355b4313d3'
 RELEASE_PINS = {
+    '3.6.7': (2291539, 'd6436afb7f1f438d2c941195df69c627a84872e0a3b962ae8e3c097a50423c60'),
     '3.6.6': (2282174, 'b0947336a4582454efba689acd633b073af70ce4f9cc886454c4ebc0e4a0af19'),
     '3.6.5': (2282181, '644face8ffca5403bdc57c81402494d24d6727b14bf2491b740bb958e8fe4697'),
     '3.6.4': (2270585, '0e30355b9c99418228adc885b13e7e860bc770454c5ea601c18f4b3c32968549'),
@@ -41,6 +42,10 @@ RELEASE_PINS = {
 # Fixed cases only: the stable target takes its size/hash from the real signed
 # fixture. It cannot run until that fixture has been published and reviewed.
 CASES = {
+    'stable-3.6.8': dict(source='3.6.7', target='3.6.8', channel='stable',
+                       source_tag='v3.6.7', target_tag='v3.6.8'),
+    'preview-3.6.8': dict(source='3.6.7', target='3.6.8', channel='preview',
+                       source_tag='v3.6.7', target_tag='v3.6.8-preview.1'),
     'stable-3.6.7': dict(source='3.6.6', target='3.6.7', channel='stable',
                        source_tag='v3.6.6', target_tag='v3.6.7'),
     'preview-3.6.7': dict(source='3.6.6', target='3.6.7', channel='preview',
@@ -273,10 +278,16 @@ def main():
             'utseende.json': b'{"Schema":1,"AccentHex":"#003B55","Organization":"","Subtitle":"","LogoFile":""}',
             'bevara-test.txt': b'Synthetic setting must survive the update.\n',
         }
-        if case['target'] in ('3.6.5', '3.6.6', '3.6.7'):
+        if case['target'] in ('3.6.5', '3.6.6', '3.6.7', '3.6.8'):
             settings['lasarljud-BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB.json'] = (
                 '{"Schema":2,"ReaderId":"BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB","Firmware":"04020100",'
                 '"Protocol":"Gen1WebSequences-v1","TableLength":143,"Original":"' + '00' * 52 + '"}').encode()
+
+        permits_recovery = tuple(map(int, case['source'].split('.'))) >= (3, 6, 7)
+        if permits_recovery:
+            settings['aterstall-synthetic.json'] = b'opaque interrupted scan'
+            settings['usb-pending-synthetic.json'] = b'opaque interrupted USB preparation'
+            settings['usb-original-synthetic.json'] = b'opaque original USB state'
 
         for name, content in settings.items():
             (data / name).write_bytes(content)
@@ -332,13 +343,20 @@ def main():
         changed_zip = bytearray(new_zip)
         changed_zip[len(changed_zip) // 2] ^= 1
         install_case('Changed release ZIP rejected without replacing the old app', envelope, bytes(changed_zip), False)
-        pending = data / 'aterstall-synthetic.json'
-        pending.write_text('{}')
-        try:
-            install_case('Pending recovery blocks replacement and preserves settings', envelope, new_zip, False)
-        finally:
-            pending.unlink()
+        if not permits_recovery:
+            pending = data / 'aterstall-synthetic.json'
+            pending.write_text('{}')
+            try:
+                install_case('Pending recovery blocks replacement and preserves settings', envelope, new_zip, False)
+            finally:
+                pending.unlink()
         install_case(f"Actual {case['source']} helper installs the signed {case['target']} package", envelope, new_zip, True)
+        if permits_recovery:
+            for name, content in settings.items():
+                if name.lower().endswith('.json'):
+                    require((job / 'preserved-settings' / name).read_bytes() == content,
+                            'Prior installer did not retain an exact private settings/recovery backup.')
+            result['checks'].append('Prior installer preserves all saved recovery and private backup copies')
         require(tree(target) == expected_tree, 'Installed app differs from the signed release package.')
         backups = list(target.parent.glob('Bricklasaren.previous-*.app'))
         require(len(backups) == 1 and tree(backups[0]) == original_tree, 'Original app was not preserved exactly.')
