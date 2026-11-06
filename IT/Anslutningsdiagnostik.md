@@ -26,3 +26,11 @@ Från 3.6.3 godkänner Windows både `00`/`FF` och heltalsrepresentationerna `00
 Spara felrapport under Hjälp. Vid Gen1-formatfel anger `SOUND_GEN1_FORMAT` kontrollen `Length` eller `Flags`, tabellens byteantal och vid flaggfel en offentlig sekvens-/stegposition. Inga sekvensvärden delas.
 
 Rapporten räknar även sparade återställningsfiler för läsning respektive USB, utan namn, läsar-ID eller innehåll. En sådan fil kan tillhöra en tidigare körning eller annan läsare även om den anslutna läsaren är klar. Uppdateringsspärren behålls och förklaras uttryckligen; inga journaler raderas eller kringgås. Använd Återställ läsaren bara om den knappen är tillgänglig för den anslutna läsaren. Om den redan är klar och uppdateringen ändå spärras behöver IT granska den lokala återställningen. Manuell uppackning i en separat programmapp bevarar AppData, där återställningen ligger.
+
+### Uppdateringar med sparad återställning (3.6.7)
+
+Spärren i 3.6.6 och äldre var för bred: den blockerade appuppdateringar när någon läsare hade sparad återställning, även om ingen åtgärd pågick. Från 3.6.7 får uppdateringen fortsätta när appen är ledig. Den vanliga läsningen kräver fortfarande rätt läsare och verifierad återställning.
+
+Efter att gamla appen avslutats och installationshjälpen tagit ensamrätt kopieras alla lokala JSON-filer oförändrade till `updates/<jobb>/preserved-settings` i den privata datamappen. Originalen behålls. Filantal (256), filstorlek (64 KiB) och total storlek (2 MiB) begränsas; länkar och mappar med JSON-namn avvisas. Ingen JSON tolkas eller laddas upp. Tomma och ogiltiga filer kopieras också. Kopian och originalen jämförs före programbytet, och originalen kontrolleras även efteråt. Ändringar under installationen stoppar uppdateringen utan att externa ändringar skrivs över. Programmappen får inte omfatta datamappen eller tvärtom. Tidigare programmapp bevaras som tidigare.
+
+3.6.6 och äldre kör den gamla spärren innan ny kod hämtas och använder sin egen installationshjälp. Därför behöver den första övergången från en redan spärrad installation göras manuellt till 3.6.7, i en separat programmapp. AppData ska behållas. Därefter kan kommande appuppdateringar installeras med sparad återställning kvar.

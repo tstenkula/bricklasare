@@ -2,16 +2,20 @@
 [CmdletBinding()]
 param(
     [switch]$InstallOnDisposableRunner,
+    [switch]$UseCurrentRecoveryHelper,
     [string]$OutputDirectory,
     [ValidateSet('historical', 'stable-3.6.1', 'stable-3.6.2', 'stable-3.6.4', 'preview-3.6.4', 'stable-3.6.5', 'preview-3.6.5', 'stable-3.6.6', 'preview-3.6.6')][string]$Case = 'historical'
 )
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 $Case = $Case.ToLowerInvariant()
+if ($UseCurrentRecoveryHelper -and (-not $InstallOnDisposableRunner -or $Case -cne 'stable-3.6.6')) { throw 'The current-helper replay requires its fixed disposable-runner case.' }
 if ($PSVersionTable.PSEdition -ne 'Desktop' -or [Environment]::OSVersion.Platform -ne 'Win32NT') { throw 'Use Windows PowerShell 5.1.' }
 
 # A reproducible acceptance test of the actual, immutable published artifacts.
-# No source patching, replacement signing key, profile redirection, or policy change.
+# Default cases use the unmodified published helper. The explicit recovery-helper
+# replay uses the current helper with only its minimum-version literal lowered.
+# No signing key replacement, profile redirection, or OS policy change.
 $sourceVersion = '3.5.2'; $targetVersion = '3.6.0'; $channel = 'preview'
 $sourceTag = 'v3.5.2-preview.1'; $targetTag = 'v3.6.0-preview.1'
 $oldSize = 205960; $newSize = 213221
@@ -110,7 +114,8 @@ if ($InstallOnDisposableRunner) {
         $event = [IO.File]::ReadAllText($env:GITHUB_EVENT_PATH) | ConvertFrom-Json
         $allowedEvent = $event.pull_request.head.repo.full_name -ceq 'tstenkula/bricklasare' -and $event.pull_request.base.repo.full_name -ceq 'tstenkula/bricklasare' -and -not [string]::IsNullOrWhiteSpace($event.pull_request.head.ref)
     }
-    if (-not $allowedEvent) { throw 'Use manual dispatch or a same-repository pull request.' }
+    if ($UseCurrentRecoveryHelper -and $env:GITHUB_EVENT_NAME -ceq 'push' -and $env:GITHUB_REF -ceq 'refs/heads/main') { $allowedEvent = $true }
+    if (-not $allowedEvent) { throw 'Use manual dispatch, a same-repository pull request, or the fixed current-helper replay on main.' }
 }
 $vendorRoot = Join-Path ([Environment]::GetFolderPath('LocalApplicationData')) 'Tobtech'
 if ($InstallOnDisposableRunner -and (Test-Path -LiteralPath $vendorRoot)) { throw 'Existing Tobtech data found; preserve it and refuse the installation test.' }
@@ -253,6 +258,12 @@ try {
         if ($targetVersion -ceq '3.6.5' -or $targetVersion -ceq '3.6.6') {
             $sentinels['lasarljud-BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB.json'] = ('{"Schema":2,"ReaderId":"BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB","Firmware":"04020100","Protocol":"Gen1WebSequences-v1","TableLength":143,"Original":"' + ('00' * 52) + '"}')
         }
+        if ($UseCurrentRecoveryHelper) {
+            $sentinels['aterstall-CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC.json'] = 'opaque interrupted scan for another reader'
+            $sentinels['usb-pending-DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD.json'] = 'opaque interrupted USB preparation'
+            $sentinels['usb-original-DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD.json'] = 'opaque original USB state'
+            $sentinels['lasarljud-EEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE.json'] = 'opaque pending sound recovery'
+        }
         foreach ($name in $sentinels.Keys) { [IO.File]::WriteAllText((Join-Path $data $name), $sentinels[$name], $utf8) }
         $settingsBefore = File-Manifest $data
         [IO.File]::WriteAllText((Join-Path $target 'old-install-sentinel.txt'), 'Retain the complete old installation.', $utf8)
@@ -266,7 +277,22 @@ try {
         Copy-Item -LiteralPath $newArchive -Destination (Join-Path $stage 'package.zip')
         Copy-Item -LiteralPath $feed -Destination (Join-Path $stage 'release.feed')
         Copy-Item -LiteralPath $oldHelper -Destination (Join-Path $stage 'Install-Update.ps1')
-        Confirm ((Get-FileHash (Join-Path $stage 'Install-Update.ps1')).Hash -ieq $helperHash) 'Staged helper retains the original trusted bytes'
+        if ($UseCurrentRecoveryHelper) {
+            # Replay the actual current installer against already-public signed bytes.
+            # Lower ONLY the current-version literal, so no future release/private key
+            # is needed. Record this mode distinctly; it is not an old-helper replay.
+            $currentSource = [IO.File]::ReadAllText((Join-Path $PSScriptRoot '..\Program\Install-Update.ps1'))
+            $versions = [regex]::Matches($currentSource, '(?m)^\$CurrentVersion = ''[0-9.]+''(?=\r?$)')
+            if ($versions.Count -ne 1) { throw 'Expected one installer version literal.' }
+            $versionMatch = $versions[0]
+            $replacement = '$CurrentVersion = ' + [char]39 + $sourceVersion + [char]39
+            $replaySource = $currentSource.Remove($versionMatch.Index, $versionMatch.Length).Insert($versionMatch.Index, $replacement)
+            [IO.File]::WriteAllText((Join-Path $stage 'Install-Update.ps1'), $replaySource, (New-Object Text.UTF8Encoding($true)))
+            $result['HelperMode'] = 'Current source; only current-version literal lowered for public-package replay'
+            Confirm ($replaySource.Contains('Save-UpdateSettingsSnapshot') -and $replaySource.Contains('Assert-UpdateSettingsSnapshot')) 'Current recovery-preserving installer is staged explicitly'
+        } else {
+            Confirm ((Get-FileHash (Join-Path $stage 'Install-Update.ps1')).Hash -ieq $helperHash) 'Staged helper retains the original trusted bytes'
+        }
 
         # The helper waits for this owned process before spawning anything. Assign
         # it to our job first, then release that gate. Closing the job kills only
@@ -312,7 +338,17 @@ namespace Tobtech.Acceptance {
         $job.Dispose(); $job = $null
         if (-not $helperOut.Wait(10000) -or -not $helperErr.Wait(10000)) { throw 'Installer child output did not close after terminating the owned job.' }
         [IO.File]::WriteAllText((Join-Path $OutputDirectory 'full-installer.log'), $helperOut.Result + $helperErr.Result, $utf8)
-        Confirm ($exit -eq 0) ('Unmodified ' + $sourceVersion + ' helper completes the real ' + $targetVersion + ' installation')
+        if ($UseCurrentRecoveryHelper) {
+            Confirm ($exit -eq 0) 'Current helper completes real installation with saved scan, USB and sound recovery'
+            $preserved = Join-Path $stage 'preserved-settings'
+            foreach ($name in $settingsBefore.Keys) {
+                if ($name.EndsWith('.json', [StringComparison]::OrdinalIgnoreCase)) {
+                    Confirm ((Get-FileHash -LiteralPath (Join-Path $preserved $name)).Hash -ceq $settingsBefore[$name]) ('Local recovery/settings backup preserved: ' + $name)
+                }
+            }
+        } else {
+            Confirm ($exit -eq 0) ('Unmodified ' + $sourceVersion + ' helper completes the real ' + $targetVersion + ' installation')
+        }
         $status = Join-Path $data 'uppdatering-status.txt'; $selfTest = Join-Path $data 'sjalvtest-reception.txt'
         Copy-Item -LiteralPath $status -Destination (Join-Path $OutputDirectory 'installer-status.txt')
         Copy-Item -LiteralPath $selfTest -Destination (Join-Path $OutputDirectory 'installed-self-test.txt')

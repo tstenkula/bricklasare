@@ -314,14 +314,14 @@
                 Check(!ConfirmedUpdate(form, directory, work).Result && calls == 0 && !Field<bool>(form, "busy"), "Update confirmation rejects a newly pending reconnect");
                 SetField(form, "reconnectPending", false);
                 string pending = Path.Combine(directory, "usb-pending-confirmation.json"); File.WriteAllText(pending, "synthetic");
-                Check(!ConfirmedUpdate(form, directory, work).Result && calls == 0, "Update confirmation rechecks recovery journals after the dialog"); File.Delete(pending);
-                Check(ConfirmedUpdate(form, directory, work).Result && calls == 1 && !Field<bool>(form, "busy"), "Offline update needs no reader and releases its own busy state");
+                Check(ConfirmedUpdate(form, directory, work).Result && calls == 1 && File.ReadAllText(pending) == "synthetic", "Saved recovery permits an idle update without modifying its journal"); File.Delete(pending);
+                Check(ConfirmedUpdate(form, directory, work).Result && calls == 2 && !Field<bool>(form, "busy"), "Offline update needs no reader and releases its own busy state");
                 System.Threading.Tasks.TaskCompletionSource<bool> gate = new System.Threading.Tasks.TaskCompletionSource<bool>();
                 Action<UpdateProgress> late = null;
                 System.Threading.Tasks.Task<bool> running = ConfirmedUpdate(form, directory, delegate(Action<UpdateProgress> progress) { late = progress; return gate.Task; });
                 Check(!running.IsCompleted && Field<bool>(form, "busy"), "Asynchronous preparation retains its busy ownership");
                 SetField(form, "reconnectPending", true);
-                Check(!ConfirmedUpdate(form, directory, work).Result && calls == 1 && Field<bool>(form, "busy"), "A rejected second update cannot release the active operation");
+                Check(!ConfirmedUpdate(form, directory, work).Result && calls == 2 && Field<bool>(form, "busy"), "A rejected second update cannot release the active operation");
                 gate.SetException(new IOException("synthetic download failure")); Application.DoEvents();
                 Check(running.IsCompleted, "The failed update continuation completes on the UI thread");
                 bool failed = false; try { running.GetAwaiter().GetResult(); } catch (IOException) { failed = true; }
@@ -614,10 +614,12 @@
             }
             Check(!Updates.Pending(root), "No pending recovery");
             Check(Updates.RecoverySummary(root) == "Sparad återställning: läsning 0; USB 0.", "Idle update diagnosis reports no persistent recovery");
-            File.WriteAllText(Path.Combine(root,"aterstall-test.json"),"pending"); Check(Updates.Pending(root), "Pending recovery blocks installation");
+            File.WriteAllText(Path.Combine(root,"aterstall-test.json"),"pending"); Check(Updates.Pending(root), "Saved recovery remains detectable for diagnosis");
             File.WriteAllText(Path.Combine(root,"usb-pending-private-id.json"),"private content");
             Check(Updates.RecoverySummary(root) == "Sparad återställning: läsning 1; USB 1.", "Recovery diagnosis counts old journals without paths, IDs or contents");
-            Check(Updates.RecoveryHelp.Contains("tidigare körning") && Updates.RecoveryHelp.Contains("annan läsare"), "Update guard explains persistent journals instead of claiming a live scan");
+            Check(Updates.SeparateStorage(Path.Combine(root, "app"), Path.Combine(root, "data")), "Sibling application and settings folders can update");
+            Check(!Updates.SeparateStorage(root, Path.Combine(root, "data")) && !Updates.SeparateStorage(Path.Combine(root, "data"), root), "An update cannot replace a folder containing settings or vice versa");
+            Check(!Updates.SeparateStorage(root, root) && Updates.SeparateStorage(root + "2", root), "Storage equality is blocked without prefix collisions");
             Check(File.ReadAllText(Path.Combine(root,"usb-pending-private-id.json")) == "private content", "Update diagnosis never removes recovery information");
             using (MemoryStream bytes = new MemoryStream()) {
                 using (var zip = new System.IO.Compression.ZipArchive(bytes, System.IO.Compression.ZipArchiveMode.Create, true)) { var entry = zip.CreateEntry("../escape"); using (var writer = new StreamWriter(entry.Open())) writer.Write("escape"); }

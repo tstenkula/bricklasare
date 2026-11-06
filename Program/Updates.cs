@@ -84,7 +84,7 @@
     }
     internal static class Updates
     {
-        internal const string Current = "3.6.6";
+        internal const string Current = "3.6.7";
         internal const string PublicKey = "<RSAKeyValue><Modulus>n8JTA0cbbRrraGNb11fX4Dyanoa8S9TzTBGl8Edfagx743HROUj9lDCwJvuVF6cNpH4mB2dN33O+XfYKZMrUaJ0K/3Q9gmPLqedlvbpuHWlEaeUzekdT4Npo7EZpwo+Cwcxjlmlahgoll1MkjEu8QERzAQEeuTB4vZCsKdXdYcRlKAQuPEKqCWkiH49prMDvVdqUUYLl2TPLcHPD8MDdkbFh/glWJDTRB1No++PCUU8PVG80X94BnMe1E/+LLyTjxaNYVSsIFZlD9XX3eup7t/UTKUk9RC1u8WY23l74ccXwy71lirntfOFW6MdK4kFsIGOk+2PF/QGwoIcpwfhSt7+Id0y85VGEqe002CngsfxUQ7BkAAAB2+D4vPcU3FBLkleYkG5B+WXasbCslTGFXG+hnFpTU2R5XQECRJ2UXjuJN/lDaw8AE7dwUTTfibfYGs9mAUZ6nECBsL3OmpXtCK9ZyTHx2AWs+hvXP+7hzcluf12K2H4MveyyNcOFSNed</Modulus><Exponent>AQAB</Exponent></RSAKeyValue>";
         internal const string Unavailable = "Det gick inte att söka efter uppdateringar. Kontrollera internetanslutningen och försök igen senare. Du kan fortsätta använda Brickläsaren.";
         internal static Version ParseVersion(string value)
@@ -168,7 +168,6 @@
             if (ParseVersion(signed.Version) <= ParseVersion(Current)) throw new InvalidDataException("Uppdateringen är inte nyare än den installerade versionen.");
             return signed;
         }
-        internal const string RecoveryHelp = "Det finns en sparad återställning från en tidigare körning eller en annan läsare. Ingen läsning behöver pågå just nu. Välj Hjälp → Återställ läsaren om knappen är tillgänglig. Om läsaren redan är klar: spara en felrapport och be IT kontrollera den sparade återställningen. Radera inga konfigurationsfiler.";
         internal static string RecoverySummary(string directory)
         {
             try
@@ -180,6 +179,14 @@
             catch (IOException) { return "Sparad återställning: kunde inte kontrolleras."; }
             catch (UnauthorizedAccessException) { return "Sparad återställning: kunde inte kontrolleras."; }
         }
+        internal static bool SeparateStorage(string program, string data)
+        {
+            string a = Path.GetFullPath(program).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar;
+            string b = Path.GetFullPath(data).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar;
+            return !a.StartsWith(b, StringComparison.OrdinalIgnoreCase) && !b.StartsWith(a, StringComparison.OrdinalIgnoreCase);
+        }
+        // Diagnostic only: persisted recovery is not an active operation and must not
+        // prevent installing a repair. The final helper snapshots all local JSON files.
         internal static bool Pending(string directory)
         {
             return Directory.GetFiles(directory, "aterstall-*.json").Length > 0 || Directory.GetFiles(directory, "usb-pending-*.json").Length > 0;
@@ -212,9 +219,9 @@
         internal static string Stage(UpdateAsset offered, Action<UpdateProgress> progress = null)
         {
             UpdateAsset asset = Authenticate(offered);
-            if (Pending(ReceptionFiles.DataPath)) throw new InvalidOperationException("Återställ läsaren innan programmet uppdateras.");
             if (Directory.Exists(Path.Combine(ReceptionFiles.PackagePath, ".git"))) throw new InvalidOperationException("Uppdatera utvecklingskopian via Git.");
             string target = Path.GetFullPath(ReceptionFiles.PackagePath).TrimEnd(Path.DirectorySeparatorChar);
+            if (!SeparateStorage(target, ReceptionFiles.DataPath)) throw new InvalidOperationException("Flytta programfilerna till en egen mapp före uppdateringen. Inställningsmappen får inte bytas ut.");
             string parent = Path.GetDirectoryName(target);
             if (String.IsNullOrEmpty(parent)) throw new InvalidOperationException("Välj en vanlig programmapp.");
             string probe = Path.Combine(parent, ".bricklasare-write-" + Guid.NewGuid().ToString("N"));
@@ -283,13 +290,12 @@
             if (IsDisposed || busy || workflow.Channel != channel) return;
             if (asset == null || Updates.ParseVersion(asset.Version) <= Updates.ParseVersion(Updates.Current)) { if (!automatic) MessageBox.Show(this, "Ingen nyare version finns i vald kanal.", "Uppdateringar"); return; }
             if (automatic) { notice.Text = "Version " + asset.Version + " finns. Välj Hjälp → IT-inställningar → Sök efter uppdatering."; return; }
-            if (Updates.Pending(ReceptionFiles.DataPath)) { MessageBox.Show(this, Updates.RecoveryHelp, "Sparad återställning"); return; }
             if (MessageBox.Show(this, "Version " + asset.Version + "\r\n\r\n" + asset.Notes + "\r\n\r\nHämta och installera? Appen startas om när uppdateringen är klar. Dina inställningar sparas.", "Uppdatera Brickläsaren", MessageBoxButtons.YesNo) != DialogResult.Yes) return;
             bool launched = false;
             try {
                 launched = await RunConfirmedUpdate(channel, ReceptionFiles.DataPath, async delegate(Action<UpdateProgress> progress) {
                     string staged = await Task.Run(delegate { return Updates.Stage(asset, progress); });
-                    if (reconnectPending || Updates.Pending(ReceptionFiles.DataPath)) throw new InvalidOperationException();
+                    if (reconnectPending) throw new InvalidOperationException();
                     string shell = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System), "WindowsPowerShell", "v1.0", "powershell.exe");
                     using (Process helper = Process.Start(new ProcessStartInfo(shell, "-NoProfile -File \"" + Path.Combine(staged,"Install-Update.ps1") + "\" -Plan \"" + Path.Combine(staged,"plan.json") + "\"") { UseShellExecute = false }))
                         if (helper == null) throw new IOException("Installationshjälpen kunde inte startas.");
@@ -301,7 +307,7 @@
         {
             // A native confirmation dialog pumps messages. Revalidate after it closes,
             // before claiming busy; declining must never release another operation.
-            if (busy || reconnectPending || IsDisposed || Disposing || workflow.Channel != channel || Updates.Pending(dataDirectory)) return false;
+            if (busy || reconnectPending || IsDisposed || Disposing || workflow.Channel != channel || !Updates.SeparateStorage(ReceptionFiles.PackagePath, dataDirectory)) return false;
             SetBusy(true);
             int generation = ++updateProgressGeneration; bool complete = false;
             try

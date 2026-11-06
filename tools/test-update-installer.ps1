@@ -17,7 +17,56 @@ function Assert-Installer([string]$Name, [bool]$Expected) {
     $script:checks++
     Write-Host ('PASS: ' + $Name)
 }
+# Execute the shipped snapshot functions, without running the installer entry point.
+$tokens = $null; $parseErrors = $null
+$syntax = [Management.Automation.Language.Parser]::ParseFile($installer, [ref]$tokens, [ref]$parseErrors)
+if ($parseErrors.Count -gt 0) { throw 'Installer syntax errors' }
+foreach ($name in @('Assert-PlainPath','Assert-UpdateStorage','Get-UpdateSettingsSnapshot','Assert-UpdateSettingsSnapshot','Save-UpdateSettingsSnapshot')) {
+    $function = @($syntax.FindAll({ param($node) $node -is [Management.Automation.Language.FunctionDefinitionAst] }, $true) | Where-Object Name -eq $name)
+    if ($function.Count -ne 1) { throw 'Missing shipped snapshot function' }
+    . ([scriptblock]::Create($function[0].Extent.Text))
+}
+function Assert-Snapshot([bool]$Condition, [string]$Description) {
+    if (-not $Condition) { throw $Description }; $script:checks++; Write-Host ('PASS: ' + $Description)
+}
+function Reject-Snapshot([scriptblock]$Operation, [string]$Description) {
+    $rejected = $false; try { & $Operation } catch { $rejected = $true }
+    Assert-Snapshot $rejected $Description
+}
 try {
+    $settings = Join-Path $temp 'data'; $jobDirectory = Join-Path $temp 'job'
+    [void][IO.Directory]::CreateDirectory($settings); [void][IO.Directory]::CreateDirectory($jobDirectory)
+    foreach ($name in @('aterstall-other.json','usb-pending-old.json','lasarljud-old.json')) {
+        [IO.File]::WriteAllBytes((Join-Path $settings $name), [byte[]]@(0,255,17,0))
+    }
+    [IO.File]::WriteAllBytes((Join-Path $settings 'empty.JSON'), [byte[]]@())
+    $saved = Save-UpdateSettingsSnapshot $settings $jobDirectory
+    Assert-Snapshot ($saved.Count -eq 4) 'All opaque JSON settings including empty/corrupt records are copied'
+    Assert-UpdateSettingsSnapshot $settings $saved
+    Assert-UpdateSettingsSnapshot (Join-Path $jobDirectory 'preserved-settings') $saved
+    Assert-Snapshot ($saved['empty.JSON'].Length -eq 0) 'Zero-length recovery files are preserved without interpretation'
+    [IO.File]::WriteAllText((Join-Path $settings 'aterstall-other.json'), 'external edit')
+    Reject-Snapshot { Assert-UpdateSettingsSnapshot $settings $saved } 'External edits abort installation without overwriting settings'
+    Assert-UpdateSettingsSnapshot (Join-Path $jobDirectory 'preserved-settings') $saved
+    Assert-Snapshot ([IO.File]::ReadAllText((Join-Path $settings 'aterstall-other.json')) -ceq 'external edit') 'Changed source and original backup are both retained'
+    Reject-Snapshot { Save-UpdateSettingsSnapshot $settings $jobDirectory } 'An existing settings backup is never overwritten'
+    $oversize = Join-Path $settings 'large.json'; [IO.File]::WriteAllBytes($oversize, (New-Object byte[] 65537))
+    Reject-Snapshot { Get-UpdateSettingsSnapshot $settings } 'Every settings file has a strict size limit'
+    [IO.File]::Delete($oversize)
+    $invalid = Join-Path $settings 'directory.json'; [void][IO.Directory]::CreateDirectory($invalid)
+    Reject-Snapshot { Get-UpdateSettingsSnapshot $settings } 'A JSON-named directory is rejected'
+    [IO.Directory]::Delete($invalid)
+    $many = Join-Path $temp 'many'; [void][IO.Directory]::CreateDirectory($many)
+    for ($i=0; $i -lt 257; $i++) { [IO.File]::WriteAllBytes((Join-Path $many ($i.ToString()+'.json')), [byte[]]@()) }
+    Reject-Snapshot { Get-UpdateSettingsSnapshot $many } 'The settings file count is bounded'
+    $total = Join-Path $temp 'total'; [void][IO.Directory]::CreateDirectory($total)
+    for ($i=0; $i -lt 33; $i++) { [IO.File]::WriteAllBytes((Join-Path $total ($i.ToString()+'.json')), (New-Object byte[] 65536)) }
+    Reject-Snapshot { Get-UpdateSettingsSnapshot $total } 'The total settings copy size is bounded'
+    Reject-Snapshot { Assert-UpdateStorage $temp $settings } 'Program replacement cannot enclose the data folder'
+    Reject-Snapshot { Assert-UpdateStorage $settings $temp } 'Data cannot enclose the program folder'
+    Reject-Snapshot { Assert-UpdateStorage $settings $settings } 'Program and data folders cannot be equal'
+    Assert-UpdateStorage (Join-Path $temp 'data2') $settings
+    Assert-Snapshot $true 'Path separation distinguishes actual folders from text prefixes'
     [IO.File]::WriteAllBytes($feedPath, $fixture)
     [IO.File]::WriteAllBytes($archive, [Text.Encoding]::UTF8.GetBytes('fixture'))
     [IO.File]::WriteAllText($plan, '{"Channel":"preview"}', $utf8)
