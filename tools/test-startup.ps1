@@ -6,7 +6,7 @@ if ('Tobtech.OmnikeyRco.Entry' -as [type]) { throw 'Run this test in a fresh Pow
 
 # Compile the real entry point against instrumented boundaries. No UI, reader,
 # network, or filesystem-writing implementation is included in this assembly.
-# The production launcher and command-line switches are unchanged.
+# Installer alias compatibility is also exercised by test-install-preflight.ps1.
 $root = Split-Path -Parent $PSScriptRoot
 $entry = [IO.File]::ReadAllText((Join-Path $root 'Program\Entry.cs'), [Text.Encoding]::UTF8)
 $boundaries = @'
@@ -30,6 +30,8 @@ namespace Tobtech.OmnikeyRco
     public static class ReceptionFiles
     {
         public static string PackagePath;
+        public static string[] PackageFiles = new string[0];
+        public static string[] RequiredPackageFiles { get { StartupProbe.Record("package-files"); return PackageFiles; } }
         public static string DataPath
         {
             get { StartupProbe.Record("data-path"); return Path.GetTempPath(); }
@@ -41,6 +43,7 @@ namespace Tobtech.OmnikeyRco
         }
         public static string SafeError(Exception error) { return error.GetType().Name; }
     }
+    public static class Updates { public static string Current = "VERSION"; }
     public static class SelfTests
     {
         public static int Run() { StartupProbe.Record("core"); return 11; }
@@ -84,6 +87,8 @@ namespace System.Windows.Forms
     }
 }
 '@
+$version = [regex]::Match($entry, 'AssemblyVersion\("([0-9.]+)"\)').Groups[1].Value
+$boundaries = $boundaries.Replace('VERSION', ([Version]$version).ToString(3))
 Add-Type -TypeDefinition ($entry + "`r`n" + $boundaries) -Language CSharp -ReferencedAssemblies @(
     'System.dll', 'System.Core.dll'
 )
@@ -93,6 +98,20 @@ function Assert-Calls([string]$Expected, [string]$Name) {
     if ($actual -ne $Expected) { throw ($Name + ': unexpected calls: ' + $actual) }
     Write-Host ('PASS: ' + $Name)
 }
+
+[Tobtech.OmnikeyRco.StartupProbe]::Reset($null)
+if ([Tobtech.OmnikeyRco.Entry]::ValidateInstallation($root) -ne 0) { throw 'Quiet installation validation failed.' }
+Assert-Calls 'package-files' 'Installer validation invokes no application, tests, profile path or report writer'
+[Tobtech.OmnikeyRco.ReceptionFiles]::PackageFiles = @('nonexistent-synthetic-package-file')
+[Tobtech.OmnikeyRco.StartupProbe]::Reset($null)
+if ([Tobtech.OmnikeyRco.Entry]::ValidateInstallation($root) -ne 1) { throw 'Missing package resource was accepted.' }
+Assert-Calls 'package-files' 'Quiet validation rejects missing files without opening an error dialog'
+[Tobtech.OmnikeyRco.ReceptionFiles]::PackageFiles = @()
+[Tobtech.OmnikeyRco.Updates]::Current = '0.0.0'
+[Tobtech.OmnikeyRco.StartupProbe]::Reset($null)
+if ([Tobtech.OmnikeyRco.Entry]::ValidateInstallation($root) -ne 1) { throw 'Mismatched assembly version was accepted.' }
+Assert-Calls '' 'Quiet validation rejects version mismatches before profile/test/UI access'
+[Tobtech.OmnikeyRco.Updates]::Current = ([Version]$version).ToString(3)
 
 [Tobtech.OmnikeyRco.StartupProbe]::Reset($null)
 if ([Tobtech.OmnikeyRco.Entry]::Run($root, $false) -ne 0) { throw 'Normal startup failed.' }

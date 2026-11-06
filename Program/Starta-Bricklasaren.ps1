@@ -1,11 +1,14 @@
 ﻿#requires -Version 5.1
 [CmdletBinding()]
-param([switch]$SelfTestOnly, [switch]$ConnectionReport)
+param([Alias('SelfTestOnly')][switch]$ValidateInstallOnly, [switch]$FullSelfTest, [switch]$ConnectionReport)
 
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 $root = Split-Path -Parent $PSScriptRoot
 try {
+    if (([int]$ValidateInstallOnly.IsPresent + [int]$FullSelfTest.IsPresent + [int]$ConnectionReport.IsPresent) -gt 1) {
+        throw 'Välj en enda kontroll åt gången.'
+    }
     if ($PSVersionTable.PSEdition -ne 'Desktop') {
         throw 'Starta med Windows PowerShell 5.1 via Starta-Bricklasaren.cmd, inte PowerShell 7.'
     }
@@ -43,8 +46,14 @@ try {
     # and run in the PowerShell process. No application EXE/output assembly is
     # requested, copied, or launched. No execution policy is changed here.
     Add-Type -TypeDefinition $source -ReferencedAssemblies $references -Language CSharp
+    # Keep the legacy -SelfTestOnly spelling for already-installed helpers, but
+    # never run UI regression tests on a customer's desktop during an update.
+    if ($ValidateInstallOnly) {
+        $result = [Tobtech.OmnikeyRco.Entry]::ValidateInstallation($root)
+        if ($result -eq 0) { Write-Host 'PASS: installation validated without application windows or reader access.' }
+        exit $result
+    }
     if ($ConnectionReport) {
-        if ($SelfTestOnly) { throw 'Välj antingen anslutningskontroll eller självtest.' }
         $report = [Tobtech.OmnikeyRco.ReceptionFiles]::ConnectionReport($root)
         $reportPath = Join-Path ([Tobtech.OmnikeyRco.ReceptionFiles]::DataPath) 'anslutningskontroll.txt'
         [Tobtech.OmnikeyRco.ReceptionFiles]::WriteAtomic($reportPath, $report)
@@ -52,14 +61,18 @@ try {
         Write-Host ('Rapporten är sparad: ' + $reportPath)
         exit 0
     }
-    $result = [Tobtech.OmnikeyRco.Entry]::Run($root, $SelfTestOnly.IsPresent)
-    if ($SelfTestOnly -and $result -eq 0) {
+    $result = [Tobtech.OmnikeyRco.Entry]::Run($root, $FullSelfTest.IsPresent)
+    if ($FullSelfTest -and $result -eq 0) {
         $report = Join-Path ([Tobtech.OmnikeyRco.ReceptionFiles]::DataPath) 'sjalvtest-reception.txt'
         Write-Host ([System.IO.File]::ReadAllText($report, $utf8))
     }
     exit $result
 }
 catch {
+    if ($ValidateInstallOnly -or $FullSelfTest) {
+        Write-Host ('Kontrollen misslyckades: {0}; HRESULT 0x{1:X8}' -f $_.Exception.GetType().FullName, $_.Exception.HResult)
+        exit 1
+    }
     $message = $_.Exception.Message
     $details = $_ | Out-String
     $safeLog = 'Startfel: {0}; HRESULT 0x{1:X8}' -f $_.Exception.GetType().FullName, $_.Exception.HResult

@@ -438,6 +438,11 @@ struct SelfTests {
     } }
     c.readerSound = true; c.workflow.sounds = false; c.rebuild()
     try snapshot(c.window, to: folder.appendingPathComponent("marinbla-klar.png"))
+    var available = UpdateAsset(Version: "3.6.9", Url: "", Sha256: "", Size: 0, Notes: nil)
+    available.channel = c.workflow.channel
+    c.availableUpdate = available; c.rebuild()
+    try snapshot(c.window, to: folder.appendingPathComponent("uppdatering-tillganglig.png"))
+    c.availableUpdate = nil; c.rebuild()
     c.outputs = ("025800772", "051501029")
     c.readyMessage()
     c.notice = "Konstruerade testnummer – inga verkliga brickor."

@@ -13,14 +13,18 @@ namespace Tobtech.OmnikeyRco
 
     public static class ReceptionProgram
     {
+        internal static bool TryLockInstance(Mutex mutex)
+        {
+            try { return mutex.WaitOne(0); }
+            catch (AbandonedMutexException) { return true; }
+        }
         public static void Run(string packagePath)
         {
             ReceptionFiles.PackagePath = Path.GetFullPath(packagePath);
-            bool owner;
             // Share the v2 mutex: never let two versions control the reader at once.
-            using (Mutex mutex = new Mutex(true, "Local\\Tobtech.OmnikeyRcoV2", out owner))
+            using (Mutex mutex = new Mutex(false, "Local\\Tobtech.OmnikeyRcoV2"))
             {
-                if (!owner) { MessageBox.Show("Brickläsaren är redan öppen. Stäng den andra versionen först.", "Brickläsaren"); return; }
+                if (!TryLockInstance(mutex)) { MessageBox.Show("Brickläsaren är redan öppen. Stäng den andra versionen först.", "Brickläsaren"); return; }
                 try
                 {
                     Application.EnableVisualStyles();
@@ -243,7 +247,7 @@ namespace Tobtech.OmnikeyRco
 
             string iconPath = Path.Combine(ReceptionFiles.PackagePath, "Program", "Bricklasaren.ico");
             if (File.Exists(iconPath)) { try { using (Icon source = new Icon(iconPath)) appIcon = (Icon)source.Clone(); Icon = appIcon; } catch (ArgumentException) { } catch (IOException) { } catch (UnauthorizedAccessException) { } }
-            Text = "Brickläsaren · 3.6.7";
+            Text = "Brickläsaren · 3.6.8";
             Font = Ui.GetFont(10F); ForeColor = Ui.Ink; BackColor = Ui.Paper;
             AutoScaleMode = AutoScaleMode.Dpi; AutoScaleDimensions = new SizeF(96F, 96F);
             StartPosition = FormStartPosition.CenterScreen;
@@ -265,6 +269,7 @@ namespace Tobtech.OmnikeyRco
             help.Size = help.MinimumSize = help.MaximumSize = new Size(100, 44); help.Margin = new Padding(12, 0, 0, 0); help.TabIndex = 0;
             Ui.Add(tools, connection); InitializeSoundButtons(tools);
             header.Controls.Add(heading, 0, 0); header.Controls.Add(tools, 1, 0); Ui.Add(root, header);
+            InitializeUpdateOffer(root);
             statusPanel.SurfaceColor = Ui.AccentLight; statusPanel.Padding = new Padding(18, 12, 18, 12);
             statusPanel.Margin = new Padding(0, 0, 0, 14); statusPanel.TabIndex = 0; statusPanel.MinimumSize = new Size(0, 132);
             statusPanel.ColumnCount = 2; statusPanel.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
@@ -339,11 +344,11 @@ namespace Tobtech.OmnikeyRco
             keyboardSink.KeyPress += delegate(object sender, KeyPressEventArgs e) { e.Handled = true; };
             FormClosing += delegate(object sender, FormClosingEventArgs e)
             {
-                if (!busy) return;
+                if (updateHandoff || !busy) return;
                 e.Cancel = true; RequestCancel();
                 notice.Text = "Låt programmet arbeta klart. Stäng sedan fönstret igen.";
             };
-            log.Add("Receptionsgränssnitt 3.6.7 (PowerShell). Lokal diagnostik utan råa kortdata.");
+            log.Add("Receptionsgränssnitt 3.6.8 (PowerShell). Lokal diagnostik utan råa kortdata.");
             ApplyAppearance(); ApplyModeUi(); UpdateButtons(); ResumeLayout(true);
             if (previewOnly) connection.Text = "Förhandsvisning · ingen läsarkontakt";
         }
@@ -487,7 +492,7 @@ namespace Tobtech.OmnikeyRco
             clear.Enabled = !busy && HasResults;
             leftState.Text = HasResults ? "Ctrl+1 för att kopiera" : "Väntar på läsning";
             rightState.Text = HasResults ? "Ctrl+2 för att kopiera" : "Väntar på läsning";
-            help.Enabled = !busy; UpdateSoundButtons();
+            help.Enabled = !busy; UpdateSoundButtons(); UpdateUpdateOffer();
         }
         private void SetBusy(bool value)
         {
@@ -1049,7 +1054,7 @@ namespace Tobtech.OmnikeyRco
             Button test = ActionButton("Kontrollera referensbricka", "Reference"); test.Enabled = protectedOutput && connected && !pending;
             Button restore = ActionButton("Återställ läsaren", "Recover"); restore.Enabled = pending;
             service.Controls.Add(test); service.Controls.Add(restore); Ui.Add(advanced, service);
-            Ui.Add(advanced, Ui.Label("Version 3.6.7 · PowerShell · Programmet läser bricknummer.\r\nTobtech", 9F, false));
+            Ui.Add(advanced, Ui.Label("Version 3.6.8 · PowerShell · Programmet läser bricknummer.\r\nTobtech", 9F, false));
             Shown += delegate { Ui.FitToScreen(this); };
             more.Click += delegate
             {

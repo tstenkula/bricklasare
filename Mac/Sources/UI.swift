@@ -256,6 +256,9 @@ final class ReaderView {
   let instruction = label("", size: 25, bold: true)
   let hint = label("", size: 13, color: Theme.muted)
   let notice = label("", size: 12)
+  let updateOfferText = label("", size: 13)
+  let updateOffer = stack(horizontal: true, spacing: 12)
+  let updateNow: ActionButton
   let footer = label("", size: 11, color: Theme.muted)
   let readButton: ActionButton, cancelButton: ActionButton, connectButton: ActionButton
   let helpButton: ActionButton, bothButton: ActionButton, clearButton: ActionButton
@@ -272,6 +275,11 @@ final class ReaderView {
   private var lastInstruction = ""
 
   init(_ controller: AppController) {
+    updateNow = ActionButton("Uppdatera", height: 36) { [weak controller] in
+      controller?.checkUpdates()
+    }
+    updateNow.widthAnchor.constraint(equalToConstant: 110).isActive = true
+    updateNow.setAccessibilityHelp("Hämta och installera den nya versionen av Brickläsaren.")
     readButton = ActionButton("Läs bricka", primary: true, height: 44) { [weak controller] in
       controller?.scan()
     }
@@ -320,6 +328,10 @@ final class ReaderView {
     let soundControls = stack([readerSoundButton, appSoundButton], horizontal: true, spacing: 1)
     let top = stack([titles, soundControls, helpButton], horizontal: true, spacing: 12)
     addFull(root, top)
+    updateOfferText.setContentHuggingPriority(.defaultLow, for: .horizontal)
+    updateOffer.addArrangedSubview(updateOfferText)
+    updateOffer.addArrangedSubview(updateNow)
+    addFull(root, updateOffer)
 
     let messages = stack([stage, instruction, hint], spacing: 7)
     for field in [stage, instruction, hint] {
@@ -382,6 +394,11 @@ final class ReaderView {
     stage.textColor = c.warning ? .systemBrown : theme.text
     instruction.stringValue = c.instruction
     hint.stringValue = c.hint
+    let offered = c.availableUpdate.flatMap { $0.channel == c.workflow.channel ? $0 : nil }
+    updateOffer.isHidden = offered == nil || c.updateOperation != nil
+    updateOfferText.stringValue = offered.map { "Version \($0.Version) finns tillgänglig." } ?? ""
+    updateOfferText.textColor = theme.text
+    updateNow.isEnabled = offered != nil && !c.busy && !c.updateChecking && !c.reconnectPending
     let updating = c.updateProgress != nil
     updatePanel.isHidden = !updating
     resultActions.isHidden = updating
@@ -475,6 +492,7 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
   var connectionTimer: Timer?, wakeObserver: NSObjectProtocol?, lastUSB: USBState?
   var usbMonitor: USBMonitor?
   var reconnectPending = false
+  var availableUpdate: UpdateAsset?
   var updateChecking = false
   var updateOperation: UUID?
   var updateProgress: UpdateProgress?
@@ -526,7 +544,7 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
       contentRect: NSRect(x: 0, y: 0, width: 900, height: 650),
       styleMask: [.titled, .closable, .miniaturizable, .resizable], backing: .buffered, defer: false
     )
-    window.title = "Brickläsaren · 3.6.7 · macOS"
+    window.title = "Brickläsaren · 3.6.8 · macOS"
     window.isReleasedWhenClosed = false
     window.minSize = NSSize(width: 800, height: 600)
     window.backgroundColor = Theme.paper
@@ -591,7 +609,7 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
   }
   @objc func aboutApp() {
     let a = NSAlert()
-    a.messageText = "Brickläsaren 3.6.7 för macOS"
+    a.messageText = "Brickläsaren 3.6.8 för macOS"
     a.informativeText =
       "Tobtech\n\nGratis för privat bruk. Kommersiellt bruk kräver en betald licens."
     a.addButton(withTitle: "Stäng")
@@ -743,7 +761,7 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
       (error as? ReaderError)?.message
       ?? "Inställningen kunde inte läsas eller sparas. Kontrollera filbehörigheterna."
     // Only bounded codes and app/platform versions are persisted, never exception payloads/APDUs/card IDs.
-    try? store.writeData("senaste-fel.txt", Data("Brickläsaren 3.6.7 macOS\nKod: \(code)\n".utf8))
+    try? store.writeData("senaste-fel.txt", Data("Brickläsaren 3.6.8 macOS\nKod: \(code)\n".utf8))
     DispatchQueue.main.async {
       self.info = self.reconnectPending ? nil : info
       self.latestErrorCode = code

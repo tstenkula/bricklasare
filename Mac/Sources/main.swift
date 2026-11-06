@@ -9,6 +9,18 @@ if let index = arguments.firstIndex(of: "--install-update"), arguments.count > i
     exit(1)
   }
 }
+// Older installed helpers invoke --self-test. Preserve that spelling as a quiet
+// installation check; full UI regression tests require an explicit separate flag.
+if arguments.contains("--self-test") || arguments.contains("--validate-installation") {
+  do {
+    try Updates.validateInstallation()
+    print("PASS: installation validated without application windows or reader access.")
+    exit(0)
+  } catch {
+    fputs("INSTALLATION VALIDATION FAILED\n", stderr)
+    exit(1)
+  }
+}
 let application = NSApplication.shared
 application.setActivationPolicy(.regular)
 application.appearance = NSAppearance(named: .aqua)
@@ -16,7 +28,7 @@ if let index = arguments.firstIndex(of: "--verify-update-archive"), arguments.co
   do { try Updates.validateZip(Data(contentsOf: URL(fileURLWithPath: arguments[index + 1]))); print("PASS: update archive paths, types and limits"); exit(0) }
   catch { fputs("UPDATE ARCHIVE FAILED: \(error)\n", stderr); exit(1) }
 }
-if arguments.contains("--self-test") {
+if arguments.contains("--full-self-test") {
   do {
     try SelfTests.run()
     exit(0)
