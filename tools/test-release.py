@@ -208,6 +208,24 @@ class ReleaseTests(unittest.TestCase):
             file.write(b'x')
         self.run_signer()
 
+    def test_every_published_mac_case_resolves_its_authenticated_fixture(self):
+        spec = importlib.util.spec_from_file_location(
+            'published_mac_validation', SCRIPT.with_name('test-published-mac-update.py'))
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        # This is an offline fixture/authentication check, never an installation.
+        def no_download(*args):
+            raise AssertionError('Fixture verification must not access the network.')
+        module.download = no_download
+        for name, case in module.CASES.items():
+            if name == 'historical':
+                continue  # The original fixture is pinned to its published commit URL.
+            with self.subTest(case=name):
+                asset = module.verify_feed(module.feed_for_case(name), case)
+                self.assertEqual(asset['Version'], case['target'])
+        with self.assertRaisesRegex(RuntimeError, 'Unknown acceptance case'):
+            module.feed_for_case('../unknown')
+
     def test_repository_public_pins_agree_without_opening_private_keys(self):
         spec = importlib.util.spec_from_file_location('release_validation', SCRIPT)
         module = importlib.util.module_from_spec(spec)
