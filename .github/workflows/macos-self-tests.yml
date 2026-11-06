@@ -15,7 +15,8 @@ concurrency:
 
 jobs:
   macos:
-    runs-on: macos-15
+    # Standard Apple Silicon runner; macos-15 repeatedly expired before setup.
+    runs-on: macos-26
     timeout-minutes: 15
     steps:
       - name: Check out source
