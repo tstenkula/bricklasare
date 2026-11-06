@@ -14,7 +14,7 @@ try {
     Write-Host 'Skript kan innehålla lokala uppgifter. Granska underlaget innan det delas.'
     [void](Read-Host 'Tryck Enter för att börja, eller stäng fönstret för att avbryta')
     $base = Join-Path ([Environment]::GetFolderPath('LocalApplicationData')) 'Tobtech\Omnikey-RCO-v2'
-    $directory = Join-Path $base ('ljudunderlag-2-' + [DateTime]::Now.ToString('yyyyMMdd-HHmmss') + '-' + [Guid]::NewGuid().ToString('N').Substring(0,8))
+    $directory = Join-Path $base ('ljudunderlag-3-' + [DateTime]::Now.ToString('yyyyMMdd-HHmmss') + '-' + [Guid]::NewGuid().ToString('N').Substring(0,8))
     if (-not $PSBoundParameters.ContainsKey('Address')) {
         $Address = '192.168.63.99'
         $config = Join-Path $base 'reception.json'

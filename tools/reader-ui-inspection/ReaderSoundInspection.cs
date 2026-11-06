@@ -176,7 +176,16 @@ namespace Tobtech.OmnikeyRco
         internal static string ReferencePath(IPAddress remote, string current, string reference)
         {
             if (String.IsNullOrEmpty(reference) || reference.Length > 200 || reference.Contains("%") ||
-                reference.Contains("\\") || reference.Contains("?") || reference.Contains("#") || reference.Contains("..")) return null;
+                reference.Contains("\\") || reference.Contains("#") || reference.Contains("..")) return null;
+            int query = reference.IndexOf('?');
+            if (query >= 0)
+            {
+                // The observed Gen1 start page uses webserver.js?<32 hex digits>.
+                // Discard this asset cache marker, never forward a query to the reader.
+                if (!reference.Substring(0, query).EndsWith(".js", StringComparison.OrdinalIgnoreCase) ||
+                    !Regex.IsMatch(reference.Substring(query + 1), @"\A[0-9A-Fa-f]{32}\z")) return null;
+                reference = reference.Substring(0, query);
+            }
             Uri target;
             if (!Uri.TryCreate(new Uri("http://" + remote + current), reference, out target) ||
                 target.Scheme != "http" || !target.IsDefaultPort || target.Host != remote.ToString() || target.UserInfo.Length != 0 ||
@@ -223,7 +232,7 @@ namespace Tobtech.OmnikeyRco
             HashSet<string> queued = new HashSet<string>(StringComparer.Ordinal) { "/" };
             HashSet<string> candidates = new HashSet<string>(StringComparer.Ordinal);
             List<string> report = new List<string> {
-                "BRICKLÄSAREN – UNDERLAG FÖR GEN1-LJUD, VERSION 2",
+                "BRICKLÄSAREN – UNDERLAG FÖR GEN1-LJUD, VERSION 3",
                 "Endast GET av startsida och script-/frame-/iframe-resurser via verifierad USB-anslutning.",
                 "Inga APDU-, formulär-, spara- eller återställningskommandon skickas. Ingen kod från läsaren körs.",
                 "HTML bearbetas i minnet; bara skript och rapport sparas. Granska lokala uppgifter före delning.",
@@ -301,7 +310,7 @@ namespace Tobtech.OmnikeyRco
             if (Directory.Exists(directory) || File.Exists(directory)) throw new IOException("Välj en ny, tom mapp för underlaget.");
             Directory.CreateDirectory(directory);
             Stopwatch timer = Stopwatch.StartNew();
-            List<string> lines = new List<string> { "BRICKLÄSAREN – KONTROLL 2", "Endast arbetssteg, statuskoder och antal. Inga råsvar eller undantagsmeddelanden." };
+            List<string> lines = new List<string> { "BRICKLÄSAREN – KONTROLL 3", "Endast arbetssteg, statuskoder och antal. Inga råsvar eller undantagsmeddelanden." };
             string stage = "START"; int requests = 0;
             Action persist = delegate {
                 using (FileStream file = new FileStream(Path.Combine(directory, "kontroll.txt"), FileMode.Create, FileAccess.Write, FileShare.Read))
